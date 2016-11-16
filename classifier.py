@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import os
 import pandas
 
 import numpy
@@ -17,7 +18,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import classification_report,confusion_matrix
 
 class WebClassifier(object):
-    def __init__(self, input_dim, nb_classes, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json'):
+    def __init__(self, input_dim, nb_classes, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights=None, embeddings_dim=50, max_sequence_length=1000):
         self.input_dim = input_dim
         self.nb_classes = nb_classes
         self.batch_size = batch_size
@@ -25,12 +26,21 @@ class WebClassifier(object):
         self.activation = activation
         self.optimizer = optimizer
         self.loss = loss
+        self.embeddings_weights = embeddings_weights
+        self.embeddings_dim = embeddings_dim
+        self.max_sequence_length = max_sequence_length
         self._create_model()
 
     def _create_model(self):
         self.model = Sequential()
 
-        self.model.add(Embedding(self.input_dim, 100, input_length=1000))
+        self.model.add(Embedding(
+            self.input_dim, 
+            self.embeddings_dim, 
+            weights=[self.embeddings_weights],
+            input_length=self.max_sequence_length,
+            trainable=False
+        ))
         self.model.add(LSTM(100))
         
         self.model.add(Dense(self.nb_classes))
@@ -84,13 +94,29 @@ class WebClassifier(object):
 
 
 
+def load(f):
+    embeddings_index = {}
+    for line in f:
+        values = line.split()
+        word = values[0]
+        coefs = numpy.asarray(values[1:], dtype='float32')
+        embeddings_index[word] = coefs
+    f.close()
+
+    return embeddings_index
+
+
 def main():
+    MAX_WORDS = 20000
+    MAX_SEQUENCE_LENGTH = 1000
     CORPUS = 'data/fine.txt'
+    IT_VECTORS = 'data/it-vectors.txt'
+    EMBEDDING_DIM = 50
     
     #from keras.datasets import reuters
     #(X_train, y_train), (X_test, y_test) = reuters.load_data(nb_words=1000, test_split=0.2)
     
-    tokenizer = Tokenizer(nb_words=1000)
+    tokenizer = Tokenizer(nb_words=MAX_WORDS)
 
     texts = []
     labels = []
@@ -101,8 +127,8 @@ def main():
 
     tokenizer.fit_on_texts(texts)
     sequences = tokenizer.texts_to_sequences(texts)
-    sequences = sequence.pad_sequences(sequences, maxlen=1000)
-    
+    sequences = sequence.pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
+
     toSplit = int(len(sequences) * 0.1)
 
     nb_classes = 14
@@ -114,8 +140,21 @@ def main():
     X_train = sequences[toSplit:]
     y_train = np_utils.to_categorical(labels[toSplit:], nb_classes)
 
-    webClassifier = WebClassifier(X_train.shape[1], nb_classes, epochs=50)
-    webClassifier.train(X_train, y_train, validation_split=0.4)
+    # prepare embedding matrix
+    embeddings_index = load(open(IT_VECTORS))
+    nb_words = min(MAX_WORDS, len(tokenizer.word_index))
+    embedding_matrix = numpy.zeros((nb_words + 1, EMBEDDING_DIM))
+    for word, i in tokenizer.word_index.items():
+        if i > MAX_WORDS:
+            continue
+        embedding_vector = embeddings_index.get(word)
+        if embedding_vector is not None:
+            # words not found in embedding index will be all-zeros.
+            embedding_matrix[i] = embedding_vector
+
+
+    webClassifier = WebClassifier(nb_words+1, nb_classes, embeddings_weights=embedding_matrix, epochs=200)
+    webClassifier.train(X_train, y_train, validation_split=0.3)
     webClassifier.evaluate(X_test, y_test) 
 
     y_pred, p = webClassifier.predict(X_test)
