@@ -109,7 +109,7 @@ def load(f):
 def main():
     MAX_WORDS = 20000
     MAX_SEQUENCE_LENGTH = 1000
-    CORPUS = 'data/fine.txt'
+    CORPUS = 'data/it-train'
     IT_VECTORS = 'data/it-vectors.txt'
     EMBEDDING_DIM = 50
     
