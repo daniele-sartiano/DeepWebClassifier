@@ -2,8 +2,9 @@
 
 import sys
 import os
-import pandas
+import argparse
 
+import pandas
 import numpy
 import math
 from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input
@@ -12,6 +13,7 @@ from keras.models import Sequential, Model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing import sequence
+from keras.layers.convolutional import Convolution1D, MaxPooling1D
 from keras.utils import np_utils
 
 from sklearn.preprocessing import MinMaxScaler
@@ -38,11 +40,15 @@ class WebClassifier(object):
             self.input_dim, 
             self.embeddings_dim, 
             weights=[self.embeddings_weights],
-            input_length=self.max_sequence_length,
-            trainable=False
+            input_length=self.max_sequence_length
         ))
-        self.model.add(LSTM(100))
-        
+
+        self.model.add(Convolution1D(nb_filter=512, filter_length=3, border_mode='same', activation='relu'))
+        self.model.add(MaxPooling1D(pool_length=2))
+        # self.model.add(LSTM(512, dropout_W=0.2, dropout_U=0.2, return_sequences=True))
+        # self.model.add(LSTM(256, dropout_W=0.2, dropout_U=0.2, return_sequences=True))
+        self.model.add(LSTM(128, dropout_W=0.2, dropout_U=0.2))
+
         self.model.add(Dense(self.nb_classes))
         self.model.add(Activation(self.activation))
 
@@ -58,7 +64,7 @@ class WebClassifier(object):
                        validation_split=validation_split,
                        validation_data=dev,
                        callbacks=[
-                           EarlyStopping(verbose=True, patience=5, monitor='val_loss'),
+                           EarlyStopping(verbose=True, patience=30, monitor='val_loss'),
                            ModelCheckpoint('TestModel-progress', monitor='val_loss', verbose=True, save_best_only=True)
                        ])
 
@@ -109,9 +115,11 @@ def load(f):
 def main():
     MAX_WORDS = 20000
     MAX_SEQUENCE_LENGTH = 1000
-    CORPUS = 'data/it-train'
+    CORPUS = 'data/fine.txt'
     IT_VECTORS = 'data/it-vectors.txt'
-    EMBEDDING_DIM = 50
+    EMBEDDING_DIM = 100
+
+    numpy.random.seed(7)
     
     #from keras.datasets import reuters
     #(X_train, y_train), (X_test, y_test) = reuters.load_data(nb_words=1000, test_split=0.2)
@@ -121,13 +129,19 @@ def main():
     texts = []
     labels = []
     for i, line in enumerate(open(CORPUS)):
-        d, l, t = line.strip().split('\t')
-        labels.append(int(l))
-        texts.append(t)
+        d, t, l = line.strip().split('\t')
+        for label in l.split(','):
+            labels.append(int(label))
+            texts.append(t)
 
     tokenizer.fit_on_texts(texts)
     sequences = tokenizer.texts_to_sequences(texts)
     sequences = sequence.pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
+
+    rng_state = numpy.random.get_state()
+    numpy.random.shuffle(sequences)
+    numpy.random.set_state(rng_state)
+    numpy.random.shuffle(labels)
 
     toSplit = int(len(sequences) * 0.1)
 
@@ -153,7 +167,7 @@ def main():
             embedding_matrix[i] = embedding_vector
 
 
-    webClassifier = WebClassifier(nb_words+1, nb_classes, embeddings_weights=embedding_matrix, epochs=200)
+    webClassifier = WebClassifier(nb_words+1, nb_classes, embeddings_dim=EMBEDDING_DIM, embeddings_weights=embedding_matrix, epochs=200)
     webClassifier.train(X_train, y_train, validation_split=0.3)
     webClassifier.evaluate(X_test, y_test) 
 
