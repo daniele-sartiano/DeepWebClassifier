@@ -17,6 +17,9 @@ test.txt: test
 	head -1000 test | $(UTILS)/createDataset.py -d $(TRAINING_DIR) -p $(PROCESSES) > $@
 
 
+# Word Embeddings Section
+
+EMBEDDINGS_SIZE=300
 DOWNLOADER_DIR = /data/download
 
 $(DATA)/all_domains.txt:
@@ -30,8 +33,11 @@ $(DATA)/all_domains.txt:
 		done \
 	done
 
-$(DATA)/w2v_domains.txt: $(DATA)/all_domains.txt
-	$(UTILS)/selectDomains.py < $< > $@
+$(DATA)/w2v_corpus.txt: $(DATA)/all_domains.txt
+	 $(UTILS)/selectDomains.py < $< | head -300000 | $(UTILS)/createDataset.py -d $(DOWNLOADER_DIR) -p 18 > $@
 
-$(DATA)/w2v_corpus.txt: $(DATA)/w2v_domains.txt
-	 $(UTILS)/createDataset.py -d $(DOWNLOADER_DIR) < $< > $@
+$(DATA)/w2v_corpus.tok: $(DATA)/w2v_corpus.txt
+	cut -f2 $< | $(UTILS)/normalizer.py > $@
+
+$(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).txt: $(DATA)/w2v_corpus.tok
+	$(UTILS)/w2v.py --size $(EMBEDDINGS_SIZE) --filename $@ < $<
