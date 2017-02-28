@@ -4,8 +4,6 @@ import sys
 import numpy
 
 numpy.random.seed(7)
-TH = 1000000
-
 paths = []
 
 for l in sys.stdin:
@@ -15,5 +13,5 @@ for l in sys.stdin:
 
 numpy.random.shuffle(paths)
 
-for l in paths[:TH]:
+for l in paths:
     print '%s\t-1\t-1' % l
