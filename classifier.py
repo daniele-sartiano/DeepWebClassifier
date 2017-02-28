@@ -7,7 +7,7 @@ import argparse
 import pandas
 import numpy
 import math
-from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input
+from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten
 from keras.layers.embeddings import Embedding
 from keras.models import Sequential, Model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -35,12 +35,41 @@ class WebClassifier(object):
 
     def _create_model(self):
         self.model = Sequential()
+        self.model.add(Embedding(
+            self.input_dim, 
+            self.embeddings_dim, 
+            weights=[self.embeddings_weights],
+            input_length=self.max_sequence_length,
+            trainable=False
+        ))
+
+        self.model.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='same', activation='relu'))
+        self.model.add(MaxPooling1D(pool_length=5))
+
+        self.model.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='same', activation='relu'))
+        self.model.add(MaxPooling1D(pool_length=5))
+
+        self.model.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='same', activation='relu'))
+        self.model.add(MaxPooling1D(pool_length=35))
+
+        self.model.add(Flatten())
+
+        self.model.add(Dense(128, activation='relu'))
+        self.model.add(Dense(self.nb_classes, activation='softmax'))
+
+        self.model.compile(loss='categorical_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+
+    def _create_model2(self):
+        self.model = Sequential()
 
         self.model.add(Embedding(
             self.input_dim, 
             self.embeddings_dim, 
             weights=[self.embeddings_weights],
-            input_length=self.max_sequence_length
+            input_length=self.max_sequence_length,
+            trainable=False
         ))
 
         self.model.add(Convolution1D(nb_filter=512, filter_length=3, border_mode='same', activation='relu'))
@@ -64,7 +93,7 @@ class WebClassifier(object):
                        validation_split=validation_split,
                        validation_data=dev,
                        callbacks=[
-                           EarlyStopping(verbose=True, patience=30, monitor='val_loss'),
+                           EarlyStopping(verbose=True, patience=5, monitor='val_loss'),
                            ModelCheckpoint('TestModel-progress', monitor='val_loss', verbose=True, save_best_only=True)
                        ])
 
@@ -116,8 +145,9 @@ def main():
     MAX_WORDS = 20000
     MAX_SEQUENCE_LENGTH = 1000
     CORPUS = 'data/fine.txt'
-    IT_VECTORS = 'data/it-vectors.txt'
-    EMBEDDING_DIM = 100
+    #IT_VECTORS = 'data/corpus_wordembeddings-vectors.100.5.50.txt'
+    IT_VECTORS = 'data/word_embeddings_300.w2v.txt'
+    EMBEDDING_DIM = 300
 
     numpy.random.seed(7)
     
