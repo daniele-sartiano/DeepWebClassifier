@@ -19,6 +19,8 @@ from keras.utils import np_utils
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import classification_report,confusion_matrix
 
+from  utils.normalizer import normalize_line
+
 class WebClassifier(object):
     def __init__(self, input_dim, nb_classes, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights=None, embeddings_dim=50, max_sequence_length=1000):
         self.input_dim = input_dim
@@ -154,7 +156,7 @@ def main():
     #from keras.datasets import reuters
     #(X_train, y_train), (X_test, y_test) = reuters.load_data(nb_words=1000, test_split=0.2)
     
-    tokenizer = Tokenizer(nb_words=MAX_WORDS)
+    tokenizer = Tokenizer(nb_words=MAX_WORDS, lower=False)
 
     texts = []
     labels = []
@@ -162,7 +164,7 @@ def main():
         d, t, l = line.strip().split('\t')
         for label in l.split(','):
             labels.append(int(label))
-            texts.append(t)
+            texts.append(normalize_line(t))
 
     tokenizer.fit_on_texts(texts)
     sequences = tokenizer.texts_to_sequences(texts)
