@@ -35,8 +35,12 @@ $(DATA)/all_domains.txt:
 		done \
 	done
 
-$(DATA)/w2v_corpus.tok: $(DATA)/all_domains.txt
-	 $(UTILS)/selectDomains.py < $< | head -500000 | $(UTILS)/createDataset.py -d $(DOWNLOADER_DIR) -p 18 | cut -f2 | $(UTILS)/normalizer.py > $@
+$(DATA)/w2v_corpus.tsv: $(DATA)/all_domains.txt
+	$(UTILS)/selectDomains.py < $< | $(UTILS)/createDataset.py -d $(DOWNLOADER_DIR) -p 12 > $@
+
+
+$(DATA)/w2v_corpus.tok: $(DATA)/w2v_corpus.tsv
+	cut -f2 < $< | $(UTILS)/normalizer.py > $@
 
 
 $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).txt: $(DATA)/w2v_corpus.tok

@@ -45,18 +45,18 @@ class WebClassifier(object):
             trainable=False
         ))
 
-        self.model.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='same', activation='relu'))
+        self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
         self.model.add(MaxPooling1D(pool_length=5))
 
-        self.model.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='same', activation='relu'))
+        self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
         self.model.add(MaxPooling1D(pool_length=5))
 
-        self.model.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='same', activation='relu'))
+        self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
         self.model.add(MaxPooling1D(pool_length=35))
 
         self.model.add(Flatten())
 
-        self.model.add(Dense(128, activation='relu'))
+        self.model.add(Dense(512, activation='relu'))
         self.model.add(Dense(self.nb_classes, activation='softmax'))
 
         self.model.compile(loss='categorical_crossentropy',
@@ -76,10 +76,12 @@ class WebClassifier(object):
 
         self.model.add(Convolution1D(nb_filter=512, filter_length=3, border_mode='same', activation='relu'))
         self.model.add(MaxPooling1D(pool_length=2))
+
         # self.model.add(LSTM(512, dropout_W=0.2, dropout_U=0.2, return_sequences=True))
         # self.model.add(LSTM(256, dropout_W=0.2, dropout_U=0.2, return_sequences=True))
-        self.model.add(LSTM(128, dropout_W=0.2, dropout_U=0.2))
+        #self.model.add(LSTM(128, dropout_W=0.2, dropout_U=0.2))
 
+        self.model.add(Dense(128, droput=0.5))
         self.model.add(Dense(self.nb_classes))
         self.model.add(Activation(self.activation))
 
@@ -156,7 +158,6 @@ def main():
     #from keras.datasets import reuters
     #(X_train, y_train), (X_test, y_test) = reuters.load_data(nb_words=1000, test_split=0.2)
     
-    tokenizer = Tokenizer(nb_words=MAX_WORDS, lower=False)
 
     texts = []
     labels = []
@@ -164,9 +165,11 @@ def main():
         d, t, l = line.strip().split('\t')
         for label in l.split(','):
             labels.append(int(label))
-            texts.append(normalize_line(t))
+            texts.append(' '.join(normalize_line(t)))
 
+    tokenizer = Tokenizer(nb_words=MAX_WORDS, lower=False)
     tokenizer.fit_on_texts(texts)
+
     sequences = tokenizer.texts_to_sequences(texts)
     sequences = sequence.pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
 
