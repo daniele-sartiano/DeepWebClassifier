@@ -19,14 +19,17 @@ def visible(element):
 
 
 def extractor(path):
-    html = open(path).read()
-    if not html:
+    try:
+        html = open(path).read()
+        if not html:
+            return ''
+
+        soup = BeautifulSoup(html, "lxml")
+        data = soup.findAll(text=True)
+
+        return ' '.join(' '.join([' '.join([e.strip() for e in el.strip().split() if e.strip()]) for el in filter(visible, data) if el.strip()]).splitlines())
+    except:
         return ''
-
-    soup = BeautifulSoup(html, "html5lib")
-    data = soup.findAll(text=True)
-
-    return ' '.join(' '.join([' '.join([e.strip() for e in el.strip().split() if e.strip()]) for el in filter(visible, data) if el.strip()]).splitlines())
 
 
 global_path = ''
@@ -48,7 +51,8 @@ def extract(line):
             row = line.strip().split()[0]
             fname = row[row.find(domain)+len(domain)+1:]
             
-            if fname:
+            if fname and os.path.exists(os.path.join(path, fname)):
+                print >> sys.stderr, 'elaborating', os.path.join(path, fname)
                 text.append(extractor(os.path.join(path, fname)).encode('utf-8'))
 
         return '%s\t%s\t%s' % (domain, '___deep_classifier_project___'.join(text), label)
