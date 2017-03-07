@@ -12,12 +12,13 @@ def normalize(input=sys.stdin, MAX_WORDS=20000):
     for line in input:
         sentences = line.strip().split('___deep_classifier_project___')
         for sentence in sentences:
-            texts.append(re.sub(r'\d', '0', ' '.join(text_to_word_sequence(sentence, lower=False))))
-        if len(texts) % 1000 == 0:
-            print >> sys.stderr, 'read %s sentences' % len(texts)
+            s = re.sub(r'\d', '0', ' '.join(text_to_word_sequence(sentence, lower=False)))
+            texts.append(' '.join([w for w in s.split() if len(w) > 2]))
+            if len(texts) % 100000 == 0:
+                print >> sys.stderr, 'read %s sentences' % len(texts)
     print >> sys.stderr, 'loading done'
+
     tokenizer.fit_on_texts(texts)
-    print >> sys.stderr, 'output'
     return texts
 
     
@@ -27,7 +28,7 @@ def normalize_line(line, MAX_WORDS=20000):
     texts = []
     for sentence in sentences:
         s = re.sub(r'\d', '0', ' '.join(text_to_word_sequence(sentence, lower=False)))
-        texts.append(s)
+        texts.append(' '.join([w for w in s.split() if len(w) > 2]))
     tokenizer.fit_on_texts(texts)
     return texts
 
