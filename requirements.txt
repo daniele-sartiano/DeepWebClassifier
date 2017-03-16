@@ -9,6 +9,7 @@ html5lib==0.999999999
 Keras==1.2.2
 lxml==3.7.3
 mock==2.0.0
+nltk==3.2.2
 numpy==1.12.0
 pandas==0.19.2
 pbr==1.10.0
