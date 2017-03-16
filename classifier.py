@@ -46,14 +46,14 @@ class WebClassifier(object):
             trainable=False
         ))
 
-        self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
-        # self.model.add(MaxPooling1D(pool_length=5))
+        self.model.add(Convolution1D(nb_filter=1024, filter_length=5, border_mode='same', activation='relu'))
+        self.model.add(MaxPooling1D(pool_length=5))
 
         # self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
         # self.model.add(MaxPooling1D(pool_length=5))
 
         # self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
-        # self.model.add(MaxPooling1D(pool_length=5))
+        # self.model.add(MaxPooling1D(pool_length=35))
 
         # self.model.add(Flatten())
 
@@ -64,32 +64,6 @@ class WebClassifier(object):
         self.model.compile(loss='categorical_crossentropy',
               optimizer='adam',
               metrics=['accuracy'])
-
-    # def _create_model2(self):
-    #     self.model = Sequential()
-
-    #     self.model.add(Embedding(
-    #         self.input_dim, 
-    #         self.embeddings_dim, 
-    #         weights=[self.embeddings_weights],
-    #         input_length=self.max_sequence_length,
-    #         trainable=False
-    #     ))
-
-    #     self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='valid', activation='relu'))
-    #     self.model.add(MaxPooling1D(pool_length=2))
-
-    #     # self.model.add(LSTM(512, dropout_W=0.2, dropout_U=0.2, return_sequences=True))
-    #     # self.model.add(LSTM(256, dropout_W=0.2, dropout_U=0.2, return_sequences=True))
-    #     #self.model.add(LSTM(128, dropout_W=0.2, dropout_U=0.2))
-
-    #     self.model.add(Dense(128, droput=0.5))
-    #     self.model.add(Dense(self.nb_classes))
-    #     self.model.add(Activation(self.activation))
-
-    #     self.model.compile(loss=self.loss,
-    #           optimizer=self.optimizer,
-    #           metrics=['accuracy'])
 
     def train(self, X_train, y_train, dev=None, validation_split=0.0):
         self.model.fit(X_train, y_train,
@@ -192,9 +166,9 @@ def main():
 
     nb_classes = len(set(labels))
 
-    X_test = sequences[0:toSplit]
-    y_test_orig = labels[0:toSplit]
-    y_test = np_utils.to_categorical(y_test_orig, nb_classes)
+    X_dev = sequences[0:toSplit]
+    y_dev_orig = labels[0:toSplit]
+    y_dev = np_utils.to_categorical(y_dev_orig, nb_classes)
 
     X_train = sequences[toSplit:]
     y_train = np_utils.to_categorical(labels[toSplit:], nb_classes)
@@ -222,9 +196,9 @@ def main():
 
     logging.info('Evalutaing the model')
 
-    webClassifier.evaluate(X_test, y_test) 
+    webClassifier.evaluate(X_dev, y_dev) 
 
-    y_pred, p = webClassifier.predict(X_test)
+    y_pred, p = webClassifier.predict(X_dev)
 
     # predicted = open('predicted', 'w')
     # for yy in y_pred:
@@ -235,10 +209,10 @@ def main():
     #print(classification_report(numpy.argmax(y_test,axis=1), y_pred, target_names=['a', 'b']))
 
     webClassifier.modelSummary()
-    logging.info(classification_report(y_test_orig, y_pred))
+    logging.info('\n%s' % classification_report(y_dev_orig, y_pred))
     logging.info('*'*80)
     #print(confusion_matrix(numpy.argmax(y_test,axis=1), y_pred))
-    logging.info(confusion_matrix(y_test_orig, y_pred))
+    logging.info('\n%s' % confusion_matrix(y_dev_orig, y_pred))
 
 
 
