@@ -2,12 +2,12 @@ UTILS = utils
 DATA = data
 
 TRAINING_DIR = /data/fine/fine-categorization/data/training
-TRAINSET = /srv/fine/fine-categorization/training/domains.totrain
+TRAINSET = /data/fine/fine-categorization/training/domains.totrain /data/fine/fine-categorization/training/domains.todev
 
 PROCESSES=12
 
-$(DATA)/fine.txt: /srv/fine/fine-categorization/training/domains.totrain
-	 $(UTILS)/createDataset.py -d $(TRAINING_DIR) < $< > $@
+$(DATA)/fine.txt: $(TRAINSET)
+	 cat $(TRAINSET) | awk '{printf ("%s\t0\t%s\n", $$1, $$2)}' | $(UTILS)/createDataset.py -d $(TRAINING_DIR) -p 18 > $@
 
 
 # Word Embeddings Section
@@ -44,7 +44,6 @@ $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt: $(DATA)/w2v_corpus.tok
 	$(WORD2VEC)/word2vec -train $< -output $@ \
            -cbow 1 -size $(EMBEDDINGS_SIZE) -window 5 -min-count 5 -negative 0 -hs 1 \
            -sample 1e-3 -threads 18 -debug 0
-
 
 
 MAX_WORDS = 20000

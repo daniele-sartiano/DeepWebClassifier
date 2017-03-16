@@ -5,7 +5,7 @@ import os
 import argparse
 import multiprocessing
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 import re
  
 def visible(element):
@@ -25,10 +25,26 @@ def extractor(path):
             return ''
 
         soup = BeautifulSoup(html, "lxml")
-        data = soup.findAll(text=True)
+        
+        decompose_tags = ['script', 'style']
+        for tag in decompose_tags:
+            for el in soup.findAll(tag):
+                if el:
+                    #print >> sys.stderr, 'Decomposing', el
+                    el.decompose()
 
-        return ' '.join(' '.join([' '.join([e.strip() for e in el.strip().split() if e.strip()]) for el in filter(visible, data) if el.strip()]).splitlines())
-    except:
+        words = []
+        if soup.body:
+            for tag in soup.body.stripped_strings:
+                words.append(' '.join([w.strip() for w in tag.encode('utf-8').split()]))
+
+        data = ' '.join(words)
+        #data = soup.findAll(text=True)
+        #return ' '.join(' '.join([' '.join([e.strip() for e in el.strip().split() if e.strip()]) for el in filter(visible, data) if el.strip()]).splitlines())
+        return data
+
+    except Exception as e:
+        print >> sys.stderr, 'Exception', e
         return ''
 
 
@@ -52,8 +68,8 @@ def extract(line):
             fname = row[row.find(domain)+len(domain)+1:]
             
             if fname and os.path.exists(os.path.join(path, fname)):
-                print >> sys.stderr, 'elaborating', os.path.join(path, fname)
-                text.append(extractor(os.path.join(path, fname)).encode('utf-8'))
+                #print >> sys.stderr, 'elaborating', os.path.join(path, fname)
+                text.append(extractor(os.path.join(path, fname)))
 
         return '%s\t%s\t%s' % (domain, '___deep_classifier_project___'.join(text), label)
     print >> sys.stderr, 'skipping', domain, label
