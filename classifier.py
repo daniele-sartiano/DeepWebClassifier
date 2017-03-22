@@ -8,8 +8,9 @@ import logging
 import pandas
 import numpy
 import math
-from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D
+from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D, Merge
 from keras.layers.embeddings import Embedding
+#from keras.layers.merge import Concatenate
 from keras.models import Sequential, Model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.preprocessing.text import Tokenizer
@@ -22,9 +23,44 @@ from sklearn.metrics import classification_report,confusion_matrix
 
 from  utils.normalizer import normalize_line
 
+
+class Splitter(object):
+    MIN_LEN = 1
+
+    def __init__(self, resource):
+        self.vocabulary = set()
+        for token in resource:
+            self.vocabulary.add(token.strip().lower())
+
+ 
+    def ngrams(self, word):
+        for i in range(Splitter.MIN_LEN, len(word)+1):
+            if word[:i] in self.vocabulary:
+                found = word[:i]
+                elems = [el for el in self.ngrams(word[i:])]
+                yield found , elems
+
+
+    def merge(self, prefix, structure):
+        a = structure[0]
+        if not structure[1]:
+            yield prefix + ' ' + a if prefix else a
+        for el in structure[1]:
+            for e in self.merge(prefix + ' ' + a if prefix else a, el):
+                yield e
+                
+
+    def split(self, word):
+        for combinations in self.ngrams(word):
+            for tokens in self.merge('', combinations):
+                splitted = tokens.split()
+                yield splitted, sum([len(tok)/float(len(tokens)) for tok in splitted])
+
+
 class WebClassifier(object):
-    def __init__(self, input_dim, nb_classes, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights=None, embeddings_dim=50, max_sequence_length=1000):
+    def __init__(self, input_dim, nb_classes, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights=None, embeddings_dim=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=0, max_sequence_length=1000, max_sequence_length_domains=20):
         self.input_dim = input_dim
+        self.input_dim_domains = input_dim_domains
         self.nb_classes = nb_classes
         self.batch_size = batch_size
         self.epochs = epochs
@@ -33,12 +69,15 @@ class WebClassifier(object):
         self.loss = loss
         self.embeddings_weights = embeddings_weights
         self.embeddings_dim = embeddings_dim
+        self.embeddings_weights_domains = embeddings_weights_domains
+        self.embeddings_dim_domains = embeddings_dim_domains
         self.max_sequence_length = max_sequence_length
+        self.max_sequence_length_domains = max_sequence_length_domains
         self._create_model()
 
     def _create_model(self):
-        self.model = Sequential()
-        self.model.add(Embedding(
+        content = Sequential()
+        content.add(Embedding(
             self.input_dim, 
             self.embeddings_dim, 
             weights=[self.embeddings_weights],
@@ -46,19 +85,30 @@ class WebClassifier(object):
             trainable=False
         ))
 
-        self.model.add(Convolution1D(nb_filter=1024, filter_length=5, border_mode='same', activation='relu'))
-        self.model.add(MaxPooling1D(pool_length=5))
+        content.add(Convolution1D(nb_filter=1024, filter_length=5, border_mode='same', activation='relu'))
+        content.add(GlobalMaxPooling1D())
+        content.add(Dense(512, activation='relu'))
 
-        # self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
-        # self.model.add(MaxPooling1D(pool_length=5))
+        #content.add(Dense(self.nb_classes, activation='softmax'))
 
-        # self.model.add(Convolution1D(nb_filter=512, filter_length=5, border_mode='same', activation='relu'))
-        # self.model.add(MaxPooling1D(pool_length=35))
+        domain = Sequential()
 
-        # self.model.add(Flatten())
+        domain.add(Embedding(
+            self.input_dim_domains,
+            self.embeddings_dim_domains, 
+            weights=[self.embeddings_weights_domains],
+            input_length=self.max_sequence_length_domains,
+            trainable=False
+        ))
 
-        self.model.add(GlobalMaxPooling1D())
-        self.model.add(Dense(512, activation='relu'))
+        domain.add(Convolution1D(nb_filter=128, filter_length=3, border_mode='same', activation='relu'))
+        domain.add(GlobalMaxPooling1D())
+        domain.add(Dense(32))
+
+
+        self.model = Sequential()
+        self.model.add(Merge([content, domain], mode='concat'))
+        
         self.model.add(Dense(self.nb_classes, activation='softmax'))
 
         self.model.compile(loss='categorical_crossentropy',
@@ -108,6 +158,52 @@ class WebClassifier(object):
         self.model.summary()
 
 
+
+class WebClassifierMLP(WebClassifier):
+
+
+    def _create_model(self):
+        self.model = Sequential()
+        self.model.add(Embedding(
+            self.input_dim, 
+            self.embeddings_dim, 
+            weights=[self.embeddings_weights],
+            input_length=self.max_sequence_length,
+            trainable=False
+        ))
+
+        self.model.add(Flatten())        
+
+        self.model.add(Dense(self.nb_classes, activation='softmax'))
+
+        self.model.compile(loss='categorical_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+
+
+# class WebClassifierLSTM(WebClassifier):
+
+
+#     def _create_model(self):
+#         self.model = Sequential()
+#         self.model.add(Embedding(
+#             self.input_dim, 
+#             self.embeddings_dim, 
+#             weights=[self.embeddings_weights],
+#             input_length=self.max_sequence_length,
+#             trainable=False
+#         ))
+
+#         self.model.add(Flatten())        
+
+#         self.model.add(Dense(self.nb_classes, activation='softmax'))
+
+#         self.model.compile(loss='categorical_crossentropy',
+#               optimizer='adam',
+#               metrics=['accuracy'])
+
+
+
 def load_vectors(f):
     embeddings_index = {}
     embeddings_size = None
@@ -128,9 +224,11 @@ def main():
     parser = argparse.ArgumentParser(description='WebClassifier')
     parser.add_argument('-mw', '--max-words', help='Max words', type=int, required=True)
     parser.add_argument('-msl', '--max-sequence-length', help='Max sequence length', type=int, required=True)
+    parser.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
     parser.add_argument('-e', '--embeddings', help='Embeddings', type=str, required=True)
     parser.add_argument('-epochs', '--epochs', help='Epochs', type=str, default=200)
     parser.add_argument('-batch', '--batch', help='# batch', type=int, default=16)
+    parser.add_argument('-lexicon', '--lexicon', help='lexicon', type=str, default='')
 
     args = parser.parse_args()
 
@@ -140,14 +238,38 @@ def main():
 
     logging.info('Reading corpus')
 
+    vocabulary = None
+    if args.lexicon:
+        vocabulary = set()
+        for w in open(args.lexicon):
+            vocabulary.add(w.split(' ')[0].strip().lower())
+        for w in ['di', 'a', 'da', 'in', 'su', 'il', 'lo', 'la', 'un', 'e', 'i', 'o', 'al', 'd', 'l', 'c']:
+            vocabulary.add(w)
+        splitter = Splitter(vocabulary)
+
     texts = []
     labels = []
+    domains = []
     for line in sys.stdin:
         d, t, l = line.strip().split('\t')
         for label in l.split(','):
             l = 0 if int(label) == 13 else int(label)
             labels.append(l)
             texts.append(' '.join(normalize_line(t)))
+            if splitter:
+                d_words = sorted([el for el in splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
+                selected = [tok for words, th in d_words[:3] for tok in words]
+                domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+
+    logging.info('collecting domains sequences')
+
+    tokenizer_domains = Tokenizer(nb_words=args.max_words, lower=False)
+    tokenizer_domains.fit_on_texts(domains)
+
+    sequences_domains = tokenizer_domains.texts_to_sequences(domains)
+    sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=args.max_sequence_length_domains)
+
+    logging.info('collecting content sequences')
 
     tokenizer = Tokenizer(nb_words=args.max_words, lower=False)
     tokenizer.fit_on_texts(texts)
@@ -161,23 +283,31 @@ def main():
     numpy.random.shuffle(sequences)
     numpy.random.set_state(rng_state)
     numpy.random.shuffle(labels)
+    numpy.random.set_state(rng_state)
+    numpy.random.shuffle(sequences_domains)
 
     toSplit = int(len(sequences) * 0.1)
 
     nb_classes = len(set(labels))
 
     X_dev = sequences[0:toSplit]
+    X_dev_domains = sequences_domains[0:toSplit]
+
     y_dev_orig = labels[0:toSplit]
     y_dev = np_utils.to_categorical(y_dev_orig, nb_classes)
 
     X_train = sequences[toSplit:]
+    X_train_domains = sequences_domains[toSplit:]
+
     y_train = np_utils.to_categorical(labels[toSplit:], nb_classes)
 
     logging.info('Reading Embedings: using the file %s, max words %s, max sequence length %s' % (args.embeddings, args.max_words, args.max_sequence_length))
 
     # prepare embedding matrix
     embeddings_index, embeddings_size = load_vectors(open(args.embeddings))
+
     nb_words = min(args.max_words, len(tokenizer.word_index))
+
     embedding_matrix = numpy.zeros((nb_words + 1, embeddings_size))
     for word, i in tokenizer.word_index.items():
         if i > args.max_words:
@@ -187,15 +317,27 @@ def main():
             # words not found in embedding index will be all-zeros.
             embedding_matrix[i] = embedding_vector
 
-    
-    webClassifier = WebClassifier(nb_words+1, nb_classes, embeddings_dim=embeddings_size, embeddings_weights=embedding_matrix, epochs=args.epochs, batch_size=args.batch)
+    nb_words_domains = min(args.max_words, len(tokenizer_domains.word_index))
+    embedding_matrix_domains = numpy.zeros((nb_words_domains + 1, embeddings_size))
+    for word, i in tokenizer_domains.word_index.items():
+        if i > args.max_words:
+            continue
+        embedding_vector = embeddings_index.get(word)
+        if embedding_vector is not None:
+            # words not found in embedding index will be all-zeros.
+            embedding_matrix_domains[i] = embedding_vector
+
+    webClassifier = WebClassifier(nb_words+1, nb_classes, embeddings_dim=embeddings_size, embeddings_weights=embedding_matrix, embeddings_dim_domains=embeddings_size, embeddings_weights_domains=embedding_matrix_domains, max_sequence_length=args.max_sequence_length, input_dim_domains=nb_words_domains+1, epochs=args.epochs, batch_size=args.batch)
     
     logging.info(webClassifier.describeModel())
+
+    X_train = [X_train, X_train_domains]
 
     webClassifier.train(X_train, y_train, validation_split=0.3)
 
     logging.info('Evalutaing the model')
 
+    X_dev = [X_dev, X_dev_domains]
     webClassifier.evaluate(X_dev, y_dev) 
 
     y_pred, p = webClassifier.predict(X_dev)

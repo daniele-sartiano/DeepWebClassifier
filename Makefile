@@ -59,12 +59,13 @@ $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt: $(DATA)/w2v_corpus.tok word_
            -sample 1e-3 -threads 18 -debug 0
 
 
-MAX_WORDS = 20000
-MAX_SEQUENCE_LENGTH = 1000
+MAX_WORDS = 100000
+MAX_SEQUENCE_LENGTH = 10000
+MAX_SEQUENCE_LENGTH_DOMAINS = 20
 
 
-model: $(DATA)/fine.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt
-	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) < $<
+model: $(DATA)/fine.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt word_embeddings-vocabulary-$(VOCABULARY_SIZE).w2v
+	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) -msld $(MAX_SEQUENCE_LENGTH_DOMAINS) -lexicon word_embeddings-vocabulary-$(VOCABULARY_SIZE).w2v < $<
 
 model-wiki: $(DATA)/fine.txt $(DATA)/vectors-wikipedia.txt
 	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) < $<
