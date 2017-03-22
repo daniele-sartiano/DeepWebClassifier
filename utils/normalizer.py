@@ -9,7 +9,7 @@ import multiprocessing
 
 
 def normalize(input=sys.stdin):
-    MAX_WORDS=2
+    MAX_WORDS=2000
 
     tokenizer = Tokenizer(nb_words=MAX_WORDS, lower=False)
     tweetTokenizer = TweetTokenizer()
@@ -20,7 +20,7 @@ def normalize(input=sys.stdin):
         for sentence in sentences:        
             sentence = ' '.join(tweetTokenizer.tokenize(sentence)).encode('utf-8')
             s = re.sub(r'\d', '0', sentence)
-            texts.append(' '.join([w for w in s.split() if len(w) > 2]))
+            texts.append(' '.join([w for w in s.split() if len(w.strip().decode('utf-8')) > 2]))
             if len(texts) % 100000 == 0:
                 print >> sys.stderr, 'read %s sentences' % len(texts)
     print >> sys.stderr, 'loading done'
@@ -36,7 +36,7 @@ def multi_normalize(line):
     for sentence in sentences:        
         sentence = ' '.join(tweetTokenizer.tokenize(sentence)).encode('utf-8')
         s = re.sub(r'\d', '0', sentence)
-        texts.append(' '.join([w for w in s.split() if len(w) > 2]))
+        texts.append(' '.join([w for w in s.split() if len(w.strip().decode('utf-8')) > 2]))
     return texts
     
 def normalize_line(line, MAX_WORDS=20000):
