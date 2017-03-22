@@ -40,8 +40,21 @@ $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).txt: $(DATA)/w2v_corpus.tok
 	$(UTILS)/w2v.py --size $(EMBEDDINGS_SIZE) --filename $@ < $<
 
 
-$(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt: $(DATA)/w2v_corpus.tok
+VOCABULARY_SIZE=100kB
+
+# Create vocabulary:
+word_embeddings-vocabulary.txt.gz: $(DATA)/w2v_corpus.tok
+	cat $< | tr [:space:] '\n' | sort | uniq -c | sort -rn | gzip > $@
+
+# </s> must be first token
+word_embeddings-vocabulary-$(VOCABULARY_SIZE).w2v: word_embeddings-vocabulary.txt.gz
+	echo "</s> 10000" > $@
+	zcat $< | head --lines=$(VOCABULARY_SIZE) | awk '{ print $$2, $$1 }' >> $@
+
+
+$(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt: $(DATA)/w2v_corpus.tok word_embeddings-vocabulary-$(VOCABULARY_SIZE).w2v
 	$(WORD2VEC)/word2vec -train $< -output $@ \
+	   -read-vocab word_embeddings-vocabulary-$(VOCABULARY_SIZE).w2v \
            -cbow 1 -size $(EMBEDDINGS_SIZE) -window 5 -min-count 5 -negative 0 -hs 1 \
            -sample 1e-3 -threads 18 -debug 0
 
@@ -52,6 +65,10 @@ MAX_SEQUENCE_LENGTH = 1000
 
 model: $(DATA)/fine.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt
 	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) < $<
+
+model-wiki: $(DATA)/fine.txt $(DATA)/vectors-wikipedia.txt
+	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) < $<
+
 
 test.txt: test
 	head -1000 test | $(UTILS)/createDataset.py -d $(TRAINING_DIR) -p $(PROCESSES) > $@
