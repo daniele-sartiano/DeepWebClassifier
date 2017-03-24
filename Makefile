@@ -64,8 +64,10 @@ MAX_SEQUENCE_LENGTH = 10000
 MAX_SEQUENCE_LENGTH_DOMAINS = 20
 
 
-model: $(DATA)/fine.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt word_embeddings-vocabulary-$(VOCABULARY_SIZE).w2v
-	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) -msld $(MAX_SEQUENCE_LENGTH_DOMAINS) -lexicon word_embeddings-vocabulary-$(VOCABULARY_SIZE).w2v < $<
+model: $(DATA)/fine.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt $(DATA)/vectors-wikipedia.txt
+	./classifier.py --max-words $(MAX_WORDS) --max-sequence-length $(MAX_SEQUENCE_LENGTH) --embeddings $(word 2,$^) \
+		--max-words-domains $(MAX_WORDS) --max-sequence-length-domains $(MAX_SEQUENCE_LENGTH_DOMAINS) \
+		--embeddings-domains $(word 3,$^) < $<
 
 model-wiki: $(DATA)/fine.txt $(DATA)/vectors-wikipedia.txt
 	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) < $<
