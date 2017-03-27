@@ -83,10 +83,10 @@ class WebClassifier(object):
             self.embeddings_dim, 
             weights=[self.embeddings_weights],
             input_length=self.max_sequence_length,
-            trainable=True
+            trainable=False
         ))
 
-        content.add(Convolution1D(nb_filter=1024, filter_length=5, border_mode='same', activation='relu'))
+        content.add(Convolution1D(nb_filter=1024, filter_length=10, border_mode='same', activation='relu'))
         content.add(GlobalMaxPooling1D())
         content.add(Dense(512, activation='relu'))
 
@@ -99,11 +99,13 @@ class WebClassifier(object):
             self.embeddings_dim_domains, 
             weights=[self.embeddings_weights_domains],
             input_length=self.max_sequence_length_domains,
-            trainable=True
+            trainable=False
         ))
 
-        domain.add(Convolution1D(nb_filter=128, filter_length=3, border_mode='same', activation='relu'))
-        domain.add(GlobalMaxPooling1D())
+        domain.add(Flatten())
+
+        # domain.add(Convolution1D(nb_filter=128, filter_length=3, border_mode='same', activation='relu'))
+        # domain.add(GlobalMaxPooling1D())
         domain.add(Dense(32))
 
         self.model = Sequential()
@@ -332,8 +334,8 @@ def main():
             texts.append(' '.join(normalize_line(t)))
             if splitter:
                 d_words = sorted([el for el in splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = [tok for words, th in d_words[:3] for tok in words]
-                print d, selected
+                selected = set([tok for words, th in d_words[:3] for tok in words])
+                print >> sys.stderr, d, selected
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
 
 
