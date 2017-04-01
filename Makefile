@@ -60,7 +60,7 @@ $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt: $(DATA)/w2v_corpus.tok word_
 
 
 MAX_WORDS = 100000
-MAX_SEQUENCE_LENGTH = 10000
+MAX_SEQUENCE_LENGTH = 2000
 MAX_SEQUENCE_LENGTH_DOMAINS = 20
 
 BATCH=32
@@ -70,8 +70,16 @@ model: $(DATA)/fine.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE).w2v.txt $(DAT
 		--max-words-domains $(MAX_WORDS) --max-sequence-length-domains $(MAX_SEQUENCE_LENGTH_DOMAINS) \
 		--embeddings-domains $(word 3,$^) --batch $(BATCH) < $<
 
-model-wiki: $(DATA)/fine.txt $(DATA)/vectors-wikipedia.txt
-	./classifier.py -mw $(MAX_WORDS) -msl $(MAX_SEQUENCE_LENGTH) -e $(word 2,$^) < $<
+model.tuned: $(DATA)/fine.txt data/word_embeddings_300.tuning.txt $(DATA)/vectors-wikipedia.txt
+	./classifier.py --max-words $(MAX_WORDS) --max-sequence-length $(MAX_SEQUENCE_LENGTH) --embeddings $(word 2,$^) \
+		--max-words-domains $(MAX_WORDS) --max-sequence-length-domains $(MAX_SEQUENCE_LENGTH_DOMAINS) \
+		--embeddings-domains $(word 3,$^) --batch $(BATCH) < $<
+
+
+model.wiki: $(DATA)/fine.txt $(DATA)/vectors-wikipedia.txt
+	./classifier.py --max-words $(MAX_WORDS) --max-sequence-length $(MAX_SEQUENCE_LENGTH) --embeddings $(word 2,$^) \
+		--max-words-domains $(MAX_WORDS) --max-sequence-length-domains $(MAX_SEQUENCE_LENGTH_DOMAINS) \
+		--embeddings-domains $(word 2,$^) --batch $(BATCH) < $<
 
 
 test.txt: test
