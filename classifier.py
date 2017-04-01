@@ -9,7 +9,9 @@ import multiprocessing
 import pandas
 import numpy
 import math
-from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D, Merge
+import keras
+from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D
+from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
 #from keras.layers.merge import Concatenate
 from keras.models import Sequential, Model
@@ -77,6 +79,42 @@ class WebClassifier(object):
         self._create_model()
 
     def _create_model(self):
+        content_input = Input(shape=(self.max_sequence_length, ))
+        content = Embedding(
+            input_dim=self.input_dim,
+            output_dim=self.embeddings_dim, 
+            weights=[self.embeddings_weights],
+            input_length=self.max_sequence_length,
+            trainable=False
+        )(content_input)
+        content = Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu')(content)
+        content = GlobalMaxPooling1D()(content)
+        content = Dense(256, activation='relu')(content)
+        
+        domain_input = Input(shape=(self.max_sequence_length_domains, ))
+        domain = Embedding(
+            input_dim=self.input_dim_domains,
+            output_dim=self.embeddings_dim_domains, 
+            weights=[self.embeddings_weights_domains],
+            input_length=self.max_sequence_length_domains,
+            trainable=False
+        )(domain_input)
+        domain = Flatten()(domain)
+        domain = Dense(64)(domain)
+
+        x = keras.layers.concatenate([content, domain])
+        x = Dense(64, activation='relu')(x)
+        x = Dense(64, activation='relu')(x)
+        x = Dense(64, activation='relu')(x)
+        output = Dense(self.nb_classes, activation='softmax')(x)
+
+        self.model = Model(inputs=[content_input, domain_input], outputs=output)
+        self.model.compile(loss='categorical_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+        
+
+    def _create_model_sequential(self):
         content = Sequential()
         content.add(Embedding(
             self.input_dim, 
@@ -86,9 +124,21 @@ class WebClassifier(object):
             trainable=False
         ))
 
-        content.add(Convolution1D(nb_filter=1024, filter_length=10, border_mode='same', activation='relu'))
+        content.add(Dropout(0.2))
+        # content.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='valid', activation='relu'))
+        # content.add(MaxPooling1D(5))
+
+        # content.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='valid', activation='relu'))
+        # content.add(MaxPooling1D(5))
+
+        # content.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='valid', activation='relu'))
+        # content.add(MaxPooling1D(35))
+
+        content.add(Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu'))
         content.add(GlobalMaxPooling1D())
-        content.add(Dense(512, activation='relu'))
+
+        #content.add(Flatten())
+        content.add(Dense(256, activation='relu'))
 
         #content.add(Dense(self.nb_classes, activation='softmax'))
 
@@ -106,10 +156,10 @@ class WebClassifier(object):
 
         # domain.add(Convolution1D(nb_filter=128, filter_length=3, border_mode='same', activation='relu'))
         # domain.add(GlobalMaxPooling1D())
-        domain.add(Dense(32))
+        domain.add(Dense(64))
 
         self.model = Sequential()
-        self.model.add(Merge([content, domain], mode='concat'))
+        #self.model.add(Concatenate(input_shape=, [content, domain]))
         
         self.model.add(Dense(self.nb_classes, activation='softmax'))
 
@@ -137,8 +187,10 @@ class WebClassifier(object):
 
 
     def predict(self, X_test):
-        y = self.model.predict_classes(X_test)
-        p = self.model.predict_proba(X_test)
+        y = self.model.predict(X_test).argmax(axis=-1)
+        print y
+        #p = self.model.predict_proba(X_test)
+        p = []
         return y, p
 
 
@@ -285,7 +337,7 @@ def main():
     parser.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
     parser.add_argument('-e', '--embeddings', help='Embeddings', type=str, required=True)
     parser.add_argument('-ed', '--embeddings-domains', help='Embeddings for domain', type=str, required=False)
-    parser.add_argument('-epochs', '--epochs', help='Epochs', type=str, default=200)
+    parser.add_argument('-epochs', '--epochs', help='Epochs', type=int, default=200)
     parser.add_argument('-batch', '--batch', help='# batch', type=int, default=16)
 
     args = parser.parse_args()
@@ -334,10 +386,9 @@ def main():
             texts.append(' '.join(normalize_line(t)))
             if splitter:
                 d_words = sorted([el for el in splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = set([tok for words, th in d_words[:3] for tok in words])
+                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
                 print >> sys.stderr, d, selected
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
-
 
     logging.info('collecting domains sequences')
 
