@@ -14,57 +14,21 @@ from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input
 from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
 #from keras.layers.merge import Concatenate
-from keras.models import Sequential, Model
+from keras.models import Sequential, Model, load_model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing import sequence
 from keras.layers.convolutional import Convolution1D, MaxPooling1D
-from keras.utils import np_utils
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import classification_report,confusion_matrix
 
-from  utils.normalizer import normalize_line
-
-
-class Splitter(object):
-    MIN_LEN = 2
-
-    def __init__(self, resource):
-        self.vocabulary = set()
-        for token in resource:
-            self.vocabulary.add(token.strip().lower())
-
- 
-    def ngrams(self, word):
-        for i in range(Splitter.MIN_LEN, len(word)+1):
-            if word[:i] in self.vocabulary:
-                found = word[:i]
-                elems = [el for el in self.ngrams(word[i:])]
-                yield found , elems
-
-
-    def merge(self, prefix, structure):
-        a = structure[0]
-        if not structure[1]:
-            yield prefix + ' ' + a if prefix else a
-        for el in structure[1]:
-            for e in self.merge(prefix + ' ' + a if prefix else a, el):
-                yield e
-                
-
-    def split(self, word):
-        for combinations in self.ngrams(word):
-            for tokens in self.merge('', combinations):
-                splitted = tokens.split()
-                yield splitted, sum([len(tok)/float(len(tokens)) for tok in splitted])
-
+from reader import TextDomainReader, Reader
 
 class WebClassifier(object):
-    def __init__(self, nb_classes, input_dim=-1, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights=None, embeddings_dim=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=0, max_sequence_length=1000, max_sequence_length_domains=20):
+    def __init__(self, reader, input_dim=-1, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights=None, embeddings_dim=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=0, max_sequence_length=1000, max_sequence_length_domains=20):
+        self.reader = reader
+        self.nb_classes = reader.nb_classes
         self.input_dim = input_dim
         self.input_dim_domains = input_dim_domains
-        self.nb_classes = nb_classes
         self.batch_size = batch_size
         self.epochs = epochs
         self.activation = activation
@@ -76,20 +40,21 @@ class WebClassifier(object):
         self.embeddings_dim_domains = embeddings_dim_domains
         self.max_sequence_length = max_sequence_length
         self.max_sequence_length_domains = max_sequence_length_domains
+        self.file_model = file_model
         self._create_model()
 
-    def _create_model(self):
+    def _create_model(self): 
         content_input = Input(shape=(self.max_sequence_length, ))
         content = Embedding(
             input_dim=self.input_dim,
             output_dim=self.embeddings_dim, 
             weights=[self.embeddings_weights],
             input_length=self.max_sequence_length,
-            trainable=False
+            trainable=True
         )(content_input)
         content = Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu')(content)
         content = GlobalMaxPooling1D()(content)
-        content = Dense(256, activation='relu')(content)
+        #content = Dense(256, activation='relu')(content)
         
         domain_input = Input(shape=(self.max_sequence_length_domains, ))
         domain = Embedding(
@@ -97,15 +62,16 @@ class WebClassifier(object):
             output_dim=self.embeddings_dim_domains, 
             weights=[self.embeddings_weights_domains],
             input_length=self.max_sequence_length_domains,
-            trainable=False
+            trainable=True
         )(domain_input)
         domain = Flatten()(domain)
-        domain = Dense(64)(domain)
+        # domain = Dense(256, activation='relu')(domain)
 
+        #domain = Convolution1D(filters=128, kernel_size=3, border_mode='same', activation='relu')(domain)
+        #domain = GlobalMaxPooling1D()(domain)
+        
         x = keras.layers.concatenate([content, domain])
-        x = Dense(64, activation='relu')(x)
-        x = Dense(64, activation='relu')(x)
-        x = Dense(64, activation='relu')(x)
+        x = Dense(32, activation='relu')(x)
         output = Dense(self.nb_classes, activation='softmax')(x)
 
         self.model = Model(inputs=[content_input, domain_input], outputs=output)
@@ -167,6 +133,7 @@ class WebClassifier(object):
               optimizer='adam',
               metrics=['accuracy'])
 
+        
     def train(self, X_train, y_train, dev=None, validation_split=0.0):
         self.model.fit(X_train, y_train,
                        shuffle=False,
@@ -194,16 +161,24 @@ class WebClassifier(object):
         return y, p
 
 
-    def saveModel(self):
+    def save(self):
+        self.model.save(self.file_model)
+        reader_file = '%s_reader.pickle' % self.file_model
+        Reader.save(reader_file, self.reader)
         # serialize
-        model_json = self.model.to_json()
-        with open(self.file_model, "w") as json_file:
-            json_file.write(model_json)
-        # serialize weights to HDF5
-        self.model.save_weights("model.h5")
-        print("Saved model to disk")
+        # model_json = self.model.to_json()
+        # with open(self.file_model, "w") as json_file:
+        #     json_file.write(model_json)
+        # # serialize weights to HDF5
+        # self.model.save_weights("model.h5")
+        # print("Saved model to disk")
 
 
+    def load(self):
+        self.model = load_model(self.file_model)
+        reader_file = '%s_reader.pickle' % self.file_model
+        self.reader = TextDomainReader(**Reader.load(reader_file))
+        
     def describeModel(self):
         self.model.summary()
         return 'embeddings size %s, epochs %s\n%s' % (self.embeddings_dim,  self.epochs, self.model.to_yaml())
@@ -256,62 +231,6 @@ class WebClassifierMLP(WebClassifier):
 #               optimizer='adam',
 #               metrics=['accuracy'])
 
-from copy_reg import pickle
-from types import MethodType
-
-def _pickle_method(method):
-    func_name = method.im_func.__name__
-    obj = method.im_self
-    cls = method.im_class
-    return _unpickle_method, (func_name, obj, cls)
-
-
-def _unpickle_method(func_name, obj, cls):
-    for cls in cls.mro():
-        try:
-            func = cls.__dict__[func_name]
-        except KeyError:
-            pass
-        else:
-            break
-    return func.__get__(obj, cls)
-
-
-class Reader(object):
-    def __init__(self, input, processes, splitter):
-        self.input = input
-        self.pool = multiprocessing.Pool(processes)
-        self.splitter = splitter
-
-    def __getstate__(self):
-        self_dict = self.__dict__.copy()
-        del self_dict['pool']
-        return self_dict
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-
-
-    def read(self):
-        for r in self.pool.imap_unordered(self.extract, self.input, 5):
-            if r:
-                yield r
-
-    def extract(self, line):
-        d, t, l = line.strip().split('\t')
-
-        d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-        selected = [tok for words, th in d_words[:5] for tok in words]
-        domain_words = ' '.join(selected) if len(selected) > 0 else d[:-3]
-        content = ' '.join(normalize_line(t))
-
-        for label in l.split(','):
-            l = 0 if int(label) == 13 else int(label)
-            return d, l, content, domain_words
-
-
-pickle(MethodType, _pickle_method, _unpickle_method)
-
 
 def load_vectors(f):
     embeddings_index = {}
@@ -331,26 +250,48 @@ def load_vectors(f):
 
 def main():
     parser = argparse.ArgumentParser(description='WebClassifier')
-    parser.add_argument('-mw', '--max-words', help='Max words', type=int, required=True)
-    parser.add_argument('-msl', '--max-sequence-length', help='Max sequence length', type=int, required=True)
-    parser.add_argument('-mwd', '--max-words-domains', help='Max words domains', type=int)
-    parser.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
-    parser.add_argument('-e', '--embeddings', help='Embeddings', type=str, required=True)
-    parser.add_argument('-ed', '--embeddings-domains', help='Embeddings for domain', type=str, required=False)
-    parser.add_argument('-epochs', '--epochs', help='Epochs', type=int, default=200)
-    parser.add_argument('-batch', '--batch', help='# batch', type=int, default=16)
+    subparsers = parser.add_subparsers()
 
+    parser_train = subparsers.add_parser('train')
+    parser_train.set_defaults(which='train')
+
+
+    common_args = [
+        (['-f', '--file-model'], {'help':'file model', 'type':str, 'default':'model'}),
+        (['-i', '--input'], {'help':'input', 'help': 'input, default standard input', 'type':str, 'default':None}),
+        
+        ]
+
+    parser_train.add_argument('-mw', '--max-words-content', help='Max words', type=int, required=True)
+    parser_train.add_argument('-msl', '--max-sequence-length-content', help='Max sequence length', type=int, required=True)
+    parser_train.add_argument('-mwd', '--max-words-domains', help='Max words domains', type=int)
+    parser_train.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
+    parser_train.add_argument('-e', '--embeddings', help='Embeddings', type=str, required=True)
+    parser_train.add_argument('-ed', '--embeddings-domains', help='Embeddings for domain', type=str, required=False)
+    parser_train.add_argument('-epochs', '--epochs', help='Epochs', type=int, default=200)
+    parser_train.add_argument('-batch', '--batch', help='# batch', type=int, default=16)
+
+    for arg in common_args:
+        parser_train.add_argument(*arg[0], **arg[1])
+    
+    parser_test = subparsers.add_parser('test')
+    parser_test.set_defaults(which='test')
+
+    #parser_test.add_argument('', '--batch', help='# batch', type=int, default=16)
+    
     args = parser.parse_args()
-
+    
     numpy.random.seed(7)
 
     logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(message)s', level=logging.INFO)
 
     logging.info('Reading vocabulary')
-    
-    vocabulary = None
 
+    input = open(args.input) if args.input else sys.stdin
+    
+    reader = None
     if args.embeddings_domains:
+        vocabulary = None
         for w in open(args.embeddings_domains):
             # skipping first line
             if vocabulary is None:
@@ -359,86 +300,64 @@ def main():
             vocabulary.add(w.split(' ')[0].strip().lower())
         for w in ['di', 'a', 'da', 'in', 'su', 'il', 'lo', 'la', 'un', 'e', 'i', 'o', 'al', 'd', 'l', 'c']:
             vocabulary.add(w)
-        splitter = Splitter(vocabulary)
+
+        reader = TextDomainReader(input, args.max_sequence_length_content, args.max_words_content, 
+                 args.max_sequence_length_domains, args.max_words_domains, vocabulary)
+
 
     logging.info('Reading corpus')
-
-    # reader = Reader(sys.stdin, 18, splitter)
-
+    
     # texts = []
     # labels = []
     # domains = []
-    
-    # for domain, label, content, domain_words in reader.read():
-    #     labels.append(label)
-    #     texts.append(content)
-    #     domains.append(domain_words)
-        
-
-    texts = []
-    labels = []
-    domains = []
-    for line in sys.stdin:
-        d, t, l = line.strip().split('\t')
-        for label in l.split(','):
-            l = 0 if int(label) == 13 else int(label)
-            labels.append(l)
-            texts.append(' '.join(normalize_line(t)))
-            if splitter:
-                d_words = sorted([el for el in splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
-                print >> sys.stderr, d, selected
-                domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+    # for line in sys.stdin:
+    #     d, t, l = line.strip().split('\t')
+    #     for label in l.split(','):
+    #         l = 0 if int(label) == 13 else int(label)
+    #         labels.append(l)
+    #         texts.append(' '.join(normalize_line(t)))
+    #         #texts.append(normalize_line(t))
+    #         if splitter:
+    #             d_words = sorted([el for el in splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
+    #             selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
+    #             #print >> sys.stderr, d, selected
+    #             domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
 
     logging.info('collecting domains sequences')
 
-    tokenizer_domains = Tokenizer(nb_words=args.max_words_domains, lower=False)
-    tokenizer_domains.fit_on_texts(domains)
+    # tokenizer_domains = Tokenizer(nb_words=args.max_words_domains, lower=False)
+    # tokenizer_domains.fit_on_texts(domains)
 
-    sequences_domains = tokenizer_domains.texts_to_sequences(domains)
-    sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=args.max_sequence_length_domains)
+    # sequences_domains = tokenizer_domains.texts_to_sequences(domains)
+    # sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=args.max_sequence_length_domains)
 
     logging.info('collecting content sequences')
 
-    tokenizer = Tokenizer(nb_words=args.max_words, lower=False)
-    tokenizer.fit_on_texts(texts)
-
-    sequences = tokenizer.texts_to_sequences(texts)
-    sequences = sequence.pad_sequences(sequences, maxlen=args.max_sequence_length)
+    # tokenizer = Tokenizer(nb_words=args.max_words, lower=False)
+    # tokenizer.fit_on_texts(texts)
+    # # tokenizer.fit_on_texts([' '.join(t) for t in texts])
+    # # sequences = []
+    # # for doc in texts:
+    # #     sequences.append(sequence.pad_sequences(tokenizer.texts_to_sequences(doc), maxlen=args.max_sequence_length))
+    
+    # # sequences = numpy.asarray(sequences)
+    # sequences = tokenizer.texts_to_sequences(texts)
+    # sequences = sequence.pad_sequences(sequences, maxlen=args.max_sequence_length)
 
     logging.info('Splitting corpus')
 
-    rng_state = numpy.random.get_state()
-    numpy.random.shuffle(sequences)
-    numpy.random.set_state(rng_state)
-    numpy.random.shuffle(labels)
-    numpy.random.set_state(rng_state)
-    numpy.random.shuffle(sequences_domains)
 
-    toSplit = int(len(sequences) * 0.1)
-
-    nb_classes = len(set(labels))
-
-    X_dev = sequences[0:toSplit]
-    X_dev_domains = sequences_domains[0:toSplit]
-
-    y_dev_orig = labels[0:toSplit]
-    y_dev = np_utils.to_categorical(y_dev_orig, nb_classes)
-
-    X_train = sequences[toSplit:]
-    X_train_domains = sequences_domains[toSplit:]
-
-    y_train = np_utils.to_categorical(labels[toSplit:], nb_classes)
-
-    logging.info('Reading Embedings: using the file %s, max words %s, max sequence length %s' % (args.embeddings, args.max_words, args.max_sequence_length))
+    X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
+    
+    logging.info('Reading Embedings: using the file %s, max words %s, max sequence length %s' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
     # prepare embedding matrix
     embeddings_index, embeddings_size = load_vectors(open(args.embeddings))
 
-    nb_words = min(args.max_words, len(tokenizer.word_index))
+    nb_words = min(reader.max_words_content, len(reader.tokenizer_content.word_index))
     embedding_matrix = numpy.zeros((nb_words + 1, embeddings_size))
-    for word, i in tokenizer.word_index.items():
-        if i > args.max_words:
+    for word, i in reader.tokenizer_content.word_index.items():
+        if i > reader.max_words_content:
             continue
         embedding_vector = embeddings_index.get(word)
         if embedding_vector is not None:
@@ -451,42 +370,41 @@ def main():
     # embeddings matrix for domains
     embeddings_index_domains, embeddings_size_domains = load_vectors(open(args.embeddings_domains))
 
-    nb_words_domains = min(args.max_words, len(tokenizer_domains.word_index))
+    nb_words_domains = min(reader.max_words_domains, len(reader.tokenizer_domains.word_index))
     embedding_matrix_domains = numpy.zeros((nb_words_domains + 1, embeddings_size_domains))
-    for word, i in tokenizer_domains.word_index.items():
-        if i > args.max_words:
+    for word, i in reader.tokenizer_domains.word_index.items():
+        if i > reader.max_words_domains:
             continue
         embedding_vector = embeddings_index_domains.get(word)
         if embedding_vector is not None:
             # words not found in embedding index will be all-zeros.
             embedding_matrix_domains[i] = embedding_vector
 
-
     embeddings_index_domains = None
 
-
     webClassifier = WebClassifier(
-        nb_classes, 
+        reader, 
         input_dim=nb_words+1, 
         embeddings_dim=embeddings_size, 
         embeddings_weights=embedding_matrix, 
         embeddings_dim_domains=embeddings_size_domains, 
         embeddings_weights_domains=embedding_matrix_domains, 
-        max_sequence_length=args.max_sequence_length,
-        max_sequence_length_domains=args.max_sequence_length_domains,
-        input_dim_domains=nb_words_domains+1, 
+        max_sequence_length=reader.max_sequence_length_content,
+        max_sequence_length_domains=reader.max_sequence_length_domains,
+        input_dim_domains=nb_words_domains+1,
         epochs=args.epochs, 
         batch_size=args.batch)
     
     logging.info(webClassifier.describeModel())
 
-    X_train = [X_train, X_train_domains]
+    #X_train = [X_train, X_train_domains]
 
     webClassifier.train(X_train, y_train, validation_split=0.3)
+    webClassifier.save()
 
     logging.info('Evalutaing the model')
 
-    X_dev = [X_dev, X_dev_domains]
+    #X_dev = [X_dev, X_dev_domains]
     webClassifier.evaluate(X_dev, y_dev) 
 
     y_pred, p = webClassifier.predict(X_dev)
