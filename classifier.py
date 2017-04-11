@@ -285,9 +285,9 @@ def main():
 
     logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(message)s', level=logging.INFO)
 
-    logging.info('Reading vocabulary')
-
     input = open(args.input) if args.input else sys.stdin
+
+    logging.info('Reading vocabulary')
     
     reader = None
     if args.embeddings_domains:
@@ -302,54 +302,12 @@ def main():
             vocabulary.add(w)
 
         reader = TextDomainReader(input, args.max_sequence_length_content, args.max_words_content, 
-                 args.max_sequence_length_domains, args.max_words_domains, vocabulary)
-
-
-    logging.info('Reading corpus')
-    
-    # texts = []
-    # labels = []
-    # domains = []
-    # for line in sys.stdin:
-    #     d, t, l = line.strip().split('\t')
-    #     for label in l.split(','):
-    #         l = 0 if int(label) == 13 else int(label)
-    #         labels.append(l)
-    #         texts.append(' '.join(normalize_line(t)))
-    #         #texts.append(normalize_line(t))
-    #         if splitter:
-    #             d_words = sorted([el for el in splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-    #             selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
-    #             #print >> sys.stderr, d, selected
-    #             domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
-
-    logging.info('collecting domains sequences')
-
-    # tokenizer_domains = Tokenizer(nb_words=args.max_words_domains, lower=False)
-    # tokenizer_domains.fit_on_texts(domains)
-
-    # sequences_domains = tokenizer_domains.texts_to_sequences(domains)
-    # sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=args.max_sequence_length_domains)
-
-    logging.info('collecting content sequences')
-
-    # tokenizer = Tokenizer(nb_words=args.max_words, lower=False)
-    # tokenizer.fit_on_texts(texts)
-    # # tokenizer.fit_on_texts([' '.join(t) for t in texts])
-    # # sequences = []
-    # # for doc in texts:
-    # #     sequences.append(sequence.pad_sequences(tokenizer.texts_to_sequences(doc), maxlen=args.max_sequence_length))
-    
-    # # sequences = numpy.asarray(sequences)
-    # sequences = tokenizer.texts_to_sequences(texts)
-    # sequences = sequence.pad_sequences(sequences, maxlen=args.max_sequence_length)
-
-    logging.info('Splitting corpus')
+                                  args.max_sequence_length_domains, args.max_words_domains, vocabulary, logging)
 
 
     X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
     
-    logging.info('Reading Embedings: using the file %s, max words %s, max sequence length %s' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
+    logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
     # prepare embedding matrix
     embeddings_index, embeddings_size = load_vectors(open(args.embeddings))
@@ -364,8 +322,7 @@ def main():
             # words not found in embedding index will be all-zeros.
             embedding_matrix[i] = embedding_vector
 
-
-    embeddings_index = None
+    logging.info('Reading Embedings: using the file %s, max words domains %s, max sequence length %s domains' % (args.embeddings_domains, args.max_words_domains, args.max_sequence_length_domains))
 
     # embeddings matrix for domains
     embeddings_index_domains, embeddings_size_domains = load_vectors(open(args.embeddings_domains))
@@ -380,6 +337,7 @@ def main():
             # words not found in embedding index will be all-zeros.
             embedding_matrix_domains[i] = embedding_vector
 
+    embeddings_index = None
     embeddings_index_domains = None
 
     webClassifier = WebClassifier(

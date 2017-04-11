@@ -136,8 +136,9 @@ class Reader(object):
 class TextDomainReader(Reader):
     def __init__(self, input,
                  max_sequence_length_content, max_words_content, 
-                 max_sequence_length_domains, max_words_domains, domains_vocabulary):
+                 max_sequence_length_domains, max_words_domains, domains_vocabulary, logger):
         super(TextDomainReader, self).__init__(input)
+        
         self.max_sequence_length_content = max_sequence_length_content
         self.max_words_content = max_words_content
         self.max_sequence_length_domains = max_sequence_length_domains
@@ -147,6 +148,8 @@ class TextDomainReader(Reader):
         self.tokenizer_content = None
         self.tokenizer_domains = None
 
+        self.logger = logger
+        
         self.fields += [
             'max_sequence_length_content',
             'max_words_content',
@@ -163,6 +166,8 @@ class TextDomainReader(Reader):
         labels = []
         texts = []
         domains = []
+
+        self.logger.info('Reading corpus')
         
         for line in self.input:
             d, t, l = line.strip().split('\t')
@@ -176,17 +181,23 @@ class TextDomainReader(Reader):
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
 
         self.nb_classes = len(set(labels))
+
+        self.logger.info('collecting domains sequences')
         
-        self.tokenizer_domains = Tokenizer(nb_words=self.max_words_domains, lower=False)
+        self.tokenizer_domains = Tokenizer(num_words=self.max_words_domains, lower=False)
         self.tokenizer_domains.fit_on_texts(domains)
         sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
         sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=self.max_sequence_length_domains)
 
-        self.tokenizer_content = Tokenizer(nb_words=self.max_words_content, lower=False)
+        self.logger.info('collecting content sequences')
+
+        self.tokenizer_content = Tokenizer(num_words=self.max_words_content, lower=False)
         self.tokenizer_content.fit_on_texts(texts)
         sequences_content = self.tokenizer_content.texts_to_sequences(texts)
         sequences_content = sequence.pad_sequences(sequences_content, maxlen=self.max_sequence_length_content)
 
+        self.logger.info('Splitting corpus')
+        
         rng_state = numpy.random.get_state()
         numpy.random.shuffle(sequences_content)
         numpy.random.set_state(rng_state)
