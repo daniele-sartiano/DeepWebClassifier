@@ -24,9 +24,8 @@ from sklearn.metrics import classification_report,confusion_matrix
 from reader import TextDomainReader, Reader
 
 class WebClassifier(object):
-    def __init__(self, reader, input_dim_content=-1, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights_content=None, embeddings_dim_content=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=-1):
+    def __init__(self, reader=None, input_dim_content=-1, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='web.model', embeddings_weights_content=None, embeddings_dim_content=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=-1):
         self.reader = reader
-        self.nb_classes = reader.nb_classes
 
         self.input_dim_content = input_dim_content
         self.input_dim_domains = input_dim_domains
@@ -42,7 +41,9 @@ class WebClassifier(object):
         self.embeddings_dim_domains = embeddings_dim_domains
 
         self.file_model = file_model
-        self._create_model()
+
+        if reader is not None:
+            self._create_model()
 
     def _create_model(self): 
         content_input = Input(shape=(self.reader.max_sequence_length_content, ))
@@ -73,7 +74,7 @@ class WebClassifier(object):
         
         x = keras.layers.concatenate([content, domain])
         x = Dense(32, activation='relu')(x)
-        output = Dense(self.nb_classes, activation='softmax')(x)
+        output = Dense(self.reader.nb_classes, activation='softmax')(x)
 
         self.model = Model(inputs=[content_input, domain_input], outputs=output)
         self.model.compile(loss='categorical_crossentropy',
@@ -128,7 +129,7 @@ class WebClassifier(object):
         self.model = Sequential()
         #self.model.add(Concatenate(input_shape=, [content, domain]))
         
-        self.model.add(Dense(self.nb_classes, activation='softmax'))
+        self.model.add(Dense(self.reader.nb_classes, activation='softmax'))
 
         self.model.compile(loss='categorical_crossentropy',
               optimizer='adam',
@@ -179,7 +180,8 @@ class WebClassifier(object):
         self.model = load_model(self.file_model)
         reader_file = '%s_reader.pickle' % self.file_model
         self.reader = TextDomainReader(**Reader.load(reader_file))
-        
+
+
     def describeModel(self):
         self.model.summary()
         return 'embeddings content size %s, embeddings domains size %s, epochs %s\n%s' % (self.embeddings_dim_domains, self.embeddings_dim_content, self.epochs, self.model.to_yaml())
@@ -204,7 +206,7 @@ class WebClassifierMLP(WebClassifier):
 
         self.model.add(Flatten())        
 
-        self.model.add(Dense(self.nb_classes, activation='softmax'))
+        self.model.add(Dense(self.reader.nb_classes, activation='softmax'))
 
         self.model.compile(loss='categorical_crossentropy',
               optimizer='adam',
@@ -255,13 +257,11 @@ def main():
 
     parser_train = subparsers.add_parser('train')
     parser_train.set_defaults(which='train')
-
-
+    
     common_args = [
-        (['-f', '--file-model'], {'help':'file model', 'type':str, 'default':'model'}),
-        (['-i', '--input'], {'help':'input', 'help': 'input, default standard input', 'type':str, 'default':None}),
-        
-        ]
+        (['-f', '--file-model'], {'help':'file model', 'type':str, 'default':'web.model'}),
+        (['-i', '--input'], {'help':'input', 'help': 'input, default standard input', 'type':str, 'default':None})    
+    ]
 
     parser_train.add_argument('-mw', '--max-words-content', help='Max words', type=int, required=True)
     parser_train.add_argument('-msl', '--max-sequence-length-content', help='Max sequence length', type=int, required=True)
@@ -278,6 +278,10 @@ def main():
     parser_test = subparsers.add_parser('test')
     parser_test.set_defaults(which='test')
 
+    for arg in common_args:
+        parser_test.add_argument(*arg[0], **arg[1])
+
+    
     #parser_test.add_argument('', '--batch', help='# batch', type=int, default=16)
     
     args = parser.parse_args()
@@ -288,78 +292,83 @@ def main():
 
     input = open(args.input) if args.input else sys.stdin
 
-    logging.info('Reading vocabulary')
-    
-    reader = None
-    if args.embeddings_domains:
-        vocabulary = None
-        for w in open(args.embeddings_domains):
-            # skipping first line
-            if vocabulary is None:
-                vocabulary = set()
-                continue
-            vocabulary.add(w.split(' ')[0].strip().lower())
-        for w in ['di', 'a', 'da', 'in', 'su', 'il', 'lo', 'la', 'un', 'e', 'i', 'o', 'al', 'd', 'l', 'c']:
-            vocabulary.add(w)
+    if args.which == 'train':
+        logging.info('Reading vocabulary')
+        reader = None
+        if args.embeddings_domains:
+            vocabulary = None
+            for w in open(args.embeddings_domains):
+                # skipping first line
+                if vocabulary is None:
+                    vocabulary = set()
+                    continue
+                vocabulary.add(w.split(' ')[0].strip().lower())
+            for w in ['di', 'a', 'da', 'in', 'su', 'il', 'lo', 'la', 'un', 'e', 'i', 'o', 'al', 'd', 'l', 'c']:
+                vocabulary.add(w)
 
-        reader = TextDomainReader(input, args.max_sequence_length_content, args.max_words_content, 
-                                  args.max_sequence_length_domains, args.max_words_domains, vocabulary, logging)
+            reader = TextDomainReader(input, args.max_sequence_length_content, args.max_words_content, 
+                                      args.max_sequence_length_domains, args.max_words_domains, vocabulary, logging)
 
+        X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
 
-    X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
-    
-    logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
+        logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
-    num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
-                                                                                reader.max_words_content,
-                                                                                reader.tokenizer_content.word_index)
-    
-    logging.info('Reading Embedings: using the file %s, max words domains %s, max sequence length %s domains' % (args.embeddings_domains, args.max_words_domains, args.max_sequence_length_domains))
+        num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
+                                                                                    reader.max_words_content,
+                                                                                    reader.tokenizer_content.word_index)
 
-
-    num_words_domains, embedding_matrix_domains, embeddings_size_domains = Reader.read_embeddings(args.embeddings_domains,
-                                                                                reader.max_words_domains,
-                                                                                reader.tokenizer_domains.word_index)
-    webClassifier = WebClassifier(
-        reader, 
-        input_dim_content=num_words_content+1, 
-        embeddings_dim_content=embeddings_size_content, 
-        embeddings_weights_content=embedding_matrix_content, 
-        embeddings_dim_domains=embeddings_size_domains, 
-        embeddings_weights_domains=embedding_matrix_domains, 
-        input_dim_domains=num_words_domains+1,
-        epochs=args.epochs, 
-        batch_size=args.batch)
-    
-    logging.info(webClassifier.describeModel())
-
-    #X_train = [X_train, X_train_domains]
-
-    webClassifier.train(X_train, y_train, validation_split=0.3)
-    webClassifier.save()
-
-    logging.info('Evalutaing the model')
-
-    #X_dev = [X_dev, X_dev_domains]
-    webClassifier.evaluate(X_dev, y_dev) 
-
-    y_pred, p = webClassifier.predict(X_dev)
-
-    # predicted = open('predicted', 'w')
-    # for yy in y_pred:
-    #     print >> predicted, yy
-    # predicted.close()
+        logging.info('Reading Embedings: using the file %s, max words domains %s, max sequence length %s domains' % (args.embeddings_domains, args.max_words_domains, args.max_sequence_length_domains))
 
 
-    #print(classification_report(numpy.argmax(y_test,axis=1), y_pred, target_names=['a', 'b']))
+        num_words_domains, embedding_matrix_domains, embeddings_size_domains = Reader.read_embeddings(args.embeddings_domains,
+                                                                                    reader.max_words_domains,
+                                                                                    reader.tokenizer_domains.word_index)
+        webClassifier = WebClassifier(
+            reader=reader,
+            file_model=args.file_model,
+            input_dim_content=num_words_content+1,
+            embeddings_dim_content=embeddings_size_content, 
+            embeddings_weights_content=embedding_matrix_content, 
+            embeddings_dim_domains=embeddings_size_domains, 
+            embeddings_weights_domains=embedding_matrix_domains, 
+            input_dim_domains=num_words_domains+1,
+            epochs=args.epochs, 
+            batch_size=args.batch)
 
-    webClassifier.modelSummary()
-    logging.info('\n%s' % classification_report(y_dev_orig, y_pred))
-    logging.info('*'*80)
-    #print(confusion_matrix(numpy.argmax(y_test,axis=1), y_pred))
-    logging.info('\n%s' % confusion_matrix(y_dev_orig, y_pred))
+        logging.info(webClassifier.describeModel())
+
+        webClassifier.train(X_train, y_train, validation_split=0.3)
+        webClassifier.save()
+
+        logging.info('Evalutaing the model')
+        webClassifier.evaluate(X_dev, y_dev) 
+
+        y_pred, p = webClassifier.predict(X_dev)
+
+        # predicted = open('predicted', 'w')
+        # for yy in y_pred:
+        #     print >> predicted, yy
+        # predicted.close()
 
 
+        #print(classification_report(numpy.argmax(y_test,axis=1), y_pred, target_names=['a', 'b']))
+
+        webClassifier.modelSummary()
+        logging.info('\n%s' % classification_report(y_dev_orig, y_pred))
+        logging.info('*'*80)
+        #print(confusion_matrix(numpy.argmax(y_test,axis=1), y_pred))
+        logging.info('\n%s' % confusion_matrix(y_dev_orig, y_pred))
+
+    elif args.which == 'test':
+        webClassifier = WebClassifier(file_model=args.file_model)
+        webClassifier.load()
+        X, y, y_orig = webClassifier.reader.read_for_test()
+        webClassifier.evaluate(X, y)
+        y_pred, p = webClassifier.predict(X)
+        webClassifier.modelSummary()
+        logging.info('\n%s' % classification_report(y_orig, y_pred))
+        logging.info('\n%s' % confusion_matrix(y_orig, y_pred))
+        
 
 if __name__ == '__main__':
     main()

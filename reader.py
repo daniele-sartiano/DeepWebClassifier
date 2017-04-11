@@ -1,7 +1,9 @@
 from utils.normalizer import normalize_line
 
+import sys
 import cPickle
 import numpy
+import logging
 
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing import sequence
@@ -127,6 +129,7 @@ class Reader(object):
         
     @staticmethod
     def save(f, obj):
+        print {el: getattr(obj, el) for el in obj.fields}
         cPickle.dump({el: getattr(obj, el) for el in obj.fields}, open(f, 'wb'))
 
     @staticmethod
@@ -166,33 +169,73 @@ class Reader(object):
         return num_words, embedding_matrix, embeddings_size
 
 class TextDomainReader(Reader):
-    def __init__(self, input,
-                 max_sequence_length_content, max_words_content, 
-                 max_sequence_length_domains, max_words_domains, domains_vocabulary, logger):
+    def __init__(self, input=None,
+                 max_sequence_length_content=None, max_words_content=None, 
+                 max_sequence_length_domains=None, max_words_domains=None, domains_vocabulary=None,
+                 tokenizer_content=None, tokenizer_domains=None, nb_classes=-1, logger=None):
         super(TextDomainReader, self).__init__(input)
-        
+
+        if input is None:
+            self.input = sys.stdin
         self.max_sequence_length_content = max_sequence_length_content
         self.max_words_content = max_words_content
         self.max_sequence_length_domains = max_sequence_length_domains
         self.max_words_domains = max_words_domains
-        self.splitter = Splitter(domains_vocabulary)
-        self.nb_classes = -1
-        self.tokenizer_content = None
-        self.tokenizer_domains = None
+        self.domains_vocabulary = domains_vocabulary
+        self.splitter = Splitter(self.domains_vocabulary)
+        self.nb_classes = nb_classes
+        self.tokenizer_content = tokenizer_content
+        self.tokenizer_domains = tokenizer_domains
 
-        self.logger = logger
-        
+        if logger:
+            self.logger = logger
+        else:
+            logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(message)s', level=logging.INFO)
+            self.logger = logging
+            
         self.fields += [
             'max_sequence_length_content',
             'max_words_content',
             'max_sequence_length_domains',
             'max_words_domains',
-            'splitter',
+            'domains_vocabulary',
             'nb_classes',
             'tokenizer_content',
             'tokenizer_domains'
         ]
+
+
+    def read_for_test(self):
+        labels = []
+        texts = []
+        domains = []
+
+        self.logger.info('Reading corpus')
         
+        for line in self.input:
+            d, t, l = line.strip().split('\t')
+            for label in l.split(','):
+                l = 0 if int(label) == 13 else int(label)
+                labels.append(l)
+                texts.append(' '.join(normalize_line(t)))
+                d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
+                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
+                domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+
+        sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
+        sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=self.max_sequence_length_domains)
+
+        sequences_content = self.tokenizer_content.texts_to_sequences(texts)
+        sequences_content = sequence.pad_sequences(sequences_content, maxlen=self.max_sequence_length_content)
+
+        y_orig = labels
+        y = np_utils.to_categorical(y_orig, self.nb_classes)
+        
+        X = sequences_content
+        X_domains = sequences_domains
+        
+        return [X, X_domains], y, y_orig
+
         
     def read(self):
         labels = []
