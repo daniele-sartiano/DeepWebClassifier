@@ -24,44 +24,45 @@ from sklearn.metrics import classification_report,confusion_matrix
 from reader import TextDomainReader, Reader
 
 class WebClassifier(object):
-    def __init__(self, reader, input_dim=-1, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights=None, embeddings_dim=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=0, max_sequence_length=1000, max_sequence_length_domains=20):
+    def __init__(self, reader, input_dim_content=-1, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='model.json', embeddings_weights_content=None, embeddings_dim_content=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=-1):
         self.reader = reader
         self.nb_classes = reader.nb_classes
-        self.input_dim = input_dim
+
+        self.input_dim_content = input_dim_content
         self.input_dim_domains = input_dim_domains
         self.batch_size = batch_size
         self.epochs = epochs
         self.activation = activation
         self.optimizer = optimizer
         self.loss = loss
-        self.embeddings_weights = embeddings_weights
-        self.embeddings_dim = embeddings_dim
+        
+        self.embeddings_weights_content = embeddings_weights_content
+        self.embeddings_dim_content = embeddings_dim_content
         self.embeddings_weights_domains = embeddings_weights_domains
         self.embeddings_dim_domains = embeddings_dim_domains
-        self.max_sequence_length = max_sequence_length
-        self.max_sequence_length_domains = max_sequence_length_domains
+
         self.file_model = file_model
         self._create_model()
 
     def _create_model(self): 
-        content_input = Input(shape=(self.max_sequence_length, ))
+        content_input = Input(shape=(self.reader.max_sequence_length_content, ))
         content = Embedding(
-            input_dim=self.input_dim,
-            output_dim=self.embeddings_dim, 
-            weights=[self.embeddings_weights],
-            input_length=self.max_sequence_length,
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content, 
+            weights=[self.embeddings_weights_content],
+            input_length=self.reader.max_sequence_length_content,
             trainable=True
         )(content_input)
         content = Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu')(content)
         content = GlobalMaxPooling1D()(content)
         #content = Dense(256, activation='relu')(content)
         
-        domain_input = Input(shape=(self.max_sequence_length_domains, ))
+        domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
         domain = Embedding(
             input_dim=self.input_dim_domains,
             output_dim=self.embeddings_dim_domains, 
             weights=[self.embeddings_weights_domains],
-            input_length=self.max_sequence_length_domains,
+            input_length=self.reader.max_sequence_length_domains,
             trainable=True
         )(domain_input)
         domain = Flatten()(domain)
@@ -83,10 +84,10 @@ class WebClassifier(object):
     def _create_model_sequential(self):
         content = Sequential()
         content.add(Embedding(
-            self.input_dim, 
-            self.embeddings_dim, 
-            weights=[self.embeddings_weights],
-            input_length=self.max_sequence_length,
+            self.input_dim_content, 
+            self.embeddings_dim_content, 
+            weights=[self.embeddings_weights_content],
+            input_length=self.reader.max_sequence_length_content,
             trainable=False
         ))
 
@@ -114,7 +115,7 @@ class WebClassifier(object):
             self.input_dim_domains,
             self.embeddings_dim_domains, 
             weights=[self.embeddings_weights_domains],
-            input_length=self.max_sequence_length_domains,
+            input_length=self.reader.max_sequence_length_domains,
             trainable=False
         ))
 
@@ -181,7 +182,7 @@ class WebClassifier(object):
         
     def describeModel(self):
         self.model.summary()
-        return 'embeddings size %s, epochs %s\n%s' % (self.embeddings_dim,  self.epochs, self.model.to_yaml())
+        return 'embeddings content size %s, embeddings domains size %s, epochs %s\n%s' % (self.embeddings_dim_domains, self.embeddings_dim_content, self.epochs, self.model.to_yaml())
 
     def modelSummary(self):
         self.model.summary()
@@ -197,7 +198,7 @@ class WebClassifierMLP(WebClassifier):
             self.input_dim, 
             self.embeddings_dim, 
             weights=[self.embeddings_weights],
-            input_length=self.max_sequence_length,
+            input_length=self.reader.max_sequence_length_content,
             trainable=False
         ))
 
@@ -342,13 +343,11 @@ def main():
 
     webClassifier = WebClassifier(
         reader, 
-        input_dim=nb_words+1, 
-        embeddings_dim=embeddings_size, 
-        embeddings_weights=embedding_matrix, 
+        input_dim_content=nb_words+1, 
+        embeddings_dim_content=embeddings_size, 
+        embeddings_weights_content=embedding_matrix, 
         embeddings_dim_domains=embeddings_size_domains, 
         embeddings_weights_domains=embedding_matrix_domains, 
-        max_sequence_length=reader.max_sequence_length_content,
-        max_sequence_length_domains=reader.max_sequence_length_domains,
         input_dim_domains=nb_words_domains+1,
         epochs=args.epochs, 
         batch_size=args.batch)
