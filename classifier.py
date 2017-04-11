@@ -233,20 +233,20 @@ class WebClassifierMLP(WebClassifier):
 #               metrics=['accuracy'])
 
 
-def load_vectors(f):
-    embeddings_index = {}
-    embeddings_size = None
-    for line in f:
-        if embeddings_size is None:
-            embeddings_size = int(line.strip().split()[-1])
-            continue
-        values = line.split()
-        word = values[0]
-        coefs = numpy.asarray(values[1:], dtype='float32')
-        embeddings_index[word] = coefs
-    f.close()
+# def load_vectors(f):
+#     embeddings_index = {}
+#     embeddings_size = None
+#     for line in f:
+#         if embeddings_size is None:
+#             embeddings_size = int(line.strip().split()[-1])
+#             continue
+#         values = line.split()
+#         word = values[0]
+#         coefs = numpy.asarray(values[1:], dtype='float32')
+#         embeddings_index[word] = coefs
+#     f.close()
 
-    return embeddings_index, embeddings_size
+#     return embeddings_index, embeddings_size
 
 
 def main():
@@ -310,45 +310,24 @@ def main():
     
     logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
-    # prepare embedding matrix
-    embeddings_index, embeddings_size = load_vectors(open(args.embeddings))
-
-    nb_words = min(reader.max_words_content, len(reader.tokenizer_content.word_index))
-    embedding_matrix = numpy.zeros((nb_words + 1, embeddings_size))
-    for word, i in reader.tokenizer_content.word_index.items():
-        if i > reader.max_words_content:
-            continue
-        embedding_vector = embeddings_index.get(word)
-        if embedding_vector is not None:
-            # words not found in embedding index will be all-zeros.
-            embedding_matrix[i] = embedding_vector
-
+    num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
+                                                                                reader.max_words_content,
+                                                                                reader.tokenizer_content.word_index)
+    
     logging.info('Reading Embedings: using the file %s, max words domains %s, max sequence length %s domains' % (args.embeddings_domains, args.max_words_domains, args.max_sequence_length_domains))
 
-    # embeddings matrix for domains
-    embeddings_index_domains, embeddings_size_domains = load_vectors(open(args.embeddings_domains))
 
-    nb_words_domains = min(reader.max_words_domains, len(reader.tokenizer_domains.word_index))
-    embedding_matrix_domains = numpy.zeros((nb_words_domains + 1, embeddings_size_domains))
-    for word, i in reader.tokenizer_domains.word_index.items():
-        if i > reader.max_words_domains:
-            continue
-        embedding_vector = embeddings_index_domains.get(word)
-        if embedding_vector is not None:
-            # words not found in embedding index will be all-zeros.
-            embedding_matrix_domains[i] = embedding_vector
-
-    embeddings_index = None
-    embeddings_index_domains = None
-
+    num_words_domains, embedding_matrix_domains, embeddings_size_domains = Reader.read_embeddings(args.embeddings_domains,
+                                                                                reader.max_words_domains,
+                                                                                reader.tokenizer_domains.word_index)
     webClassifier = WebClassifier(
         reader, 
-        input_dim_content=nb_words+1, 
-        embeddings_dim_content=embeddings_size, 
-        embeddings_weights_content=embedding_matrix, 
+        input_dim_content=num_words_content+1, 
+        embeddings_dim_content=embeddings_size_content, 
+        embeddings_weights_content=embedding_matrix_content, 
         embeddings_dim_domains=embeddings_size_domains, 
         embeddings_weights_domains=embedding_matrix_domains, 
-        input_dim_domains=nb_words_domains+1,
+        input_dim_domains=num_words_domains+1,
         epochs=args.epochs, 
         batch_size=args.batch)
     

@@ -133,6 +133,38 @@ class Reader(object):
     def load(f):
         return cPickle.load(open(f))
         
+
+    @staticmethod
+    def load_vectors(f):
+        embeddings_index = {}
+        embeddings_size = None
+        for line in f:
+            if embeddings_size is None:
+                embeddings_size = int(line.strip().split()[-1])
+                continue
+            values = line.split()
+            word = values[0]
+            coefs = numpy.asarray(values[1:], dtype='float32')
+            embeddings_index[word] = coefs
+        f.close()
+
+        return embeddings_index, embeddings_size
+
+    @staticmethod
+    def read_embeddings(f, max_words, word_index):
+        # embeddings matrix
+        embeddings_index, embeddings_size = Reader.load_vectors(open(f))
+        num_words = min(max_words, len(word_index))
+        embedding_matrix = numpy.zeros((num_words + 1, embeddings_size))
+        for word, i in word_index.items():
+            if i > max_words:
+                continue
+            embedding_vector = embeddings_index.get(word)
+            if embedding_vector is not None:
+                # words not found in embedding index will be all-zeros.
+                embedding_matrix[i] = embedding_vector
+        return num_words, embedding_matrix, embeddings_size
+
 class TextDomainReader(Reader):
     def __init__(self, input,
                  max_sequence_length_content, max_words_content, 
@@ -218,3 +250,4 @@ class TextDomainReader(Reader):
         y_train = np_utils.to_categorical(labels[toSplit:], self.nb_classes)
 
         return [X_train, X_train_domains], y_train, [X_dev, X_dev_domains], y_dev, y_dev_orig
+
