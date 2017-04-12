@@ -190,7 +190,7 @@ class WebClassifier(object):
                        validation_data=dev,
                        callbacks=[
                            EarlyStopping(verbose=True, patience=5, monitor='val_loss'),
-                           ModelCheckpoint('%s.progress' % self.file_model, monitor='val_loss', verbose=True, save_best_only=True)
+                           ModelCheckpoint(self.file_model, monitor='val_loss', verbose=True, save_best_only=True)
                        ])
 
 
@@ -208,18 +208,21 @@ class WebClassifier(object):
         return y, p
 
 
-    def save(self):
-        self.model.save(self.file_model)
+    def save(self):        
+        #self.model.save(self.file_model)
         reader_file = '%s_reader.pickle' % self.file_model
         Reader.save(reader_file, self.reader)
 
-        
+
     def load(self):
         self.model = load_model(self.file_model)
         reader_file = '%s_reader.pickle' % self.file_model
         self.reader = TextDomainReader(**Reader.load(reader_file))
 
-
+        
+    def setModel(self):
+        self.model = load_model()
+        
     def describeModel(self):
         self.model.summary()
         return 'embeddings content size %s, embeddings domains size %s, epochs %s\n%s' % (self.embeddings_dim_domains, self.embeddings_dim_content, self.epochs, self.model.to_yaml())
@@ -382,6 +385,7 @@ def main():
         webClassifier.train(X_train, y_train, validation_split=0.3)
         webClassifier.save()
 
+        webClassifier.load()
         logging.info('Evalutaing the model')
         webClassifier.evaluate(X_dev, y_dev) 
 
