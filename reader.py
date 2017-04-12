@@ -129,7 +129,6 @@ class Reader(object):
         
     @staticmethod
     def save(f, obj):
-        print {el: getattr(obj, el) for el in obj.fields}
         cPickle.dump({el: getattr(obj, el) for el in obj.fields}, open(f, 'wb'))
 
     @staticmethod
