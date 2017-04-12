@@ -45,7 +45,55 @@ class WebClassifier(object):
         if reader is not None:
             self._create_model()
 
-    def _create_model(self): 
+
+    def _create_model(self):
+        content_input = Input(shape=(self.reader.max_sequence_length_content, ))
+        content = Embedding(
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content, 
+            weights=[self.embeddings_weights_content],
+            input_length=self.reader.max_sequence_length_content,
+            trainable=True
+        )(content_input)
+
+        content = Dropout(0.5)(content)
+
+        # Convolutional block
+        conv_blocks = []
+        for sz in (3, 5, 8, 12):
+            conv = Convolution1D(filters=256,
+                                 kernel_size=sz,
+                                 padding="valid",
+                                 activation="relu",
+                                 strides=1)(content)
+            
+            conv = MaxPooling1D(pool_size=2)(conv)
+            conv = Flatten()(conv)
+            conv_blocks.append(conv)
+        content = Concatenate()(conv_blocks)
+        content = Dropout(0.8)(content)
+
+        domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
+        domain = Embedding(
+            input_dim=self.input_dim_domains,
+            output_dim=self.embeddings_dim_domains, 
+            weights=[self.embeddings_weights_domains],
+            input_length=self.reader.max_sequence_length_domains,
+            trainable=True
+        )(domain_input)
+        domain = Flatten()(domain)
+        
+        x = keras.layers.concatenate([content, domain])
+        x = Dense(32, activation='relu')(x)
+        output = Dense(self.reader.nb_classes, activation='softmax')(x)
+
+        self.model = Model(inputs=[content_input, domain_input], outputs=output)
+        self.model.compile(loss='categorical_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+
+        
+    def _create_model_2(self): 
         content_input = Input(shape=(self.reader.max_sequence_length_content, ))
         content = Embedding(
             input_dim=self.input_dim_content,
@@ -56,7 +104,6 @@ class WebClassifier(object):
         )(content_input)
         content = Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu')(content)
         content = GlobalMaxPooling1D()(content)
-        #content = Dense(256, activation='relu')(content)
         
         domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
         domain = Embedding(
@@ -67,10 +114,6 @@ class WebClassifier(object):
             trainable=True
         )(domain_input)
         domain = Flatten()(domain)
-        # domain = Dense(256, activation='relu')(domain)
-
-        #domain = Convolution1D(filters=128, kernel_size=3, border_mode='same', activation='relu')(domain)
-        #domain = GlobalMaxPooling1D()(domain)
         
         x = keras.layers.concatenate([content, domain])
         x = Dense(32, activation='relu')(x)
@@ -103,6 +146,8 @@ class WebClassifier(object):
         # content.add(MaxPooling1D(35))
 
         content.add(Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu'))
+        # content.add(Convolution1D(filters=512, kernel_size=5, border_mode='same', activation='relu'))
+        # content.add(Convolution1D(filters=256, kernel_size=5, border_mode='same', activation='relu'))
         content.add(GlobalMaxPooling1D())
 
         #content.add(Flatten())
@@ -145,7 +190,7 @@ class WebClassifier(object):
                        validation_data=dev,
                        callbacks=[
                            EarlyStopping(verbose=True, patience=5, monitor='val_loss'),
-                           ModelCheckpoint('TestModel-progress', monitor='val_loss', verbose=True, save_best_only=True)
+                           ModelCheckpoint('%s.progress' % self.file_model, monitor='val_loss', verbose=True, save_best_only=True)
                        ])
 
 
@@ -167,15 +212,8 @@ class WebClassifier(object):
         self.model.save(self.file_model)
         reader_file = '%s_reader.pickle' % self.file_model
         Reader.save(reader_file, self.reader)
-        # serialize
-        # model_json = self.model.to_json()
-        # with open(self.file_model, "w") as json_file:
-        #     json_file.write(model_json)
-        # # serialize weights to HDF5
-        # self.model.save_weights("model.h5")
-        # print("Saved model to disk")
 
-
+        
     def load(self):
         self.model = load_model(self.file_model)
         reader_file = '%s_reader.pickle' % self.file_model
@@ -281,8 +319,12 @@ def main():
     for arg in common_args:
         parser_test.add_argument(*arg[0], **arg[1])
 
-    
-    #parser_test.add_argument('', '--batch', help='# batch', type=int, default=16)
+
+    parser_visualize = subparsers.add_parser('visualize')
+    parser_visualize.set_defaults(which='visualize')
+
+    for arg in common_args:
+        parser_visualize.add_argument(*arg[0], **arg[1])
     
     args = parser.parse_args()
     
@@ -368,7 +410,12 @@ def main():
         webClassifier.modelSummary()
         logging.info('\n%s' % classification_report(y_orig, y_pred))
         logging.info('\n%s' % confusion_matrix(y_orig, y_pred))
-        
+
+    elif args.which == 'visualize':
+        webClassifier = WebClassifier(file_model=args.file_model)
+        webClassifier.load()
+        from keras.utils import plot_model
+        plot_model(webClassifier.model, to_file='%s.png' % args.file_model)
 
 if __name__ == '__main__':
     main()
