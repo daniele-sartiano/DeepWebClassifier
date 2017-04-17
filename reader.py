@@ -204,6 +204,15 @@ class TextDomainReader(Reader):
         ]
 
 
+    @staticmethod
+    def extract_windows(sequence, window_size):
+        d = []
+        for i in range(len(sequence)-window_size+1):
+            d.append(sequence[i:i+window_size])
+        return d
+
+        
+
     def read_for_test(self):
         labels = []
         texts = []
@@ -222,11 +231,11 @@ class TextDomainReader(Reader):
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
 
         sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
-        sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=self.max_sequence_length_domains)
+        sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
 
         sequences_content = self.tokenizer_content.texts_to_sequences(texts)
-        sequences_content = sequence.pad_sequences(sequences_content, maxlen=self.max_sequence_length_content)
-
+        sequences_content = sequence.pad_sequences(sequences_content, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
+        
         y_orig = labels
         y = np_utils.to_categorical(y_orig, self.nb_classes)
         
@@ -269,7 +278,8 @@ class TextDomainReader(Reader):
         self.tokenizer_content.fit_on_texts(texts)
         sequences_content = self.tokenizer_content.texts_to_sequences(texts)
         sequences_content = sequence.pad_sequences(sequences_content, maxlen=self.max_sequence_length_content)
-
+        #sequences_content = numpy.asarray([self.extract_windows(seq, 5) for seq in sequences_content])
+        
         self.logger.info('Splitting corpus')
         
         rng_state = numpy.random.get_state()
