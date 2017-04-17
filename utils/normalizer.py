@@ -28,7 +28,7 @@ def normalize(input=sys.stdin):
     return texts
 
 
-def multi_normalize(line):
+def multi_normalize(line, lower=False):
     tweetTokenizer = TweetTokenizer()
     texts = []
     sentences = line.strip().split('___deep_classifier_project___')
@@ -36,11 +36,13 @@ def multi_normalize(line):
     for sentence in sentences:        
         sentence = ' '.join(tweetTokenizer.tokenize(sentence)).encode('utf-8')
         s = re.sub(r'\d', '0', sentence)
-        texts.append(' '.join([w for w in s.split() if len(w.strip().decode('utf-8')) > 2]))
+        s = ' '.join([w for w in s.split() if len(w.strip().decode('utf-8')) > 2])
+        if lower:
+            s.lower()
+        texts.append(s)
     return texts
     
-def normalize_line(line, MAX_WORDS=20000):
-    #tokenizer = Tokenizer(nb_words=MAX_WORDS, lower=False)
+def normalize_line(line, lower=False):
     tweetTokenizer = TweetTokenizer()
 
     sentences = line.strip().split('___deep_classifier_project___')

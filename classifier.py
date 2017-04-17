@@ -368,6 +368,7 @@ def main():
     parser_train.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
     parser_train.add_argument('-e', '--embeddings', help='Embeddings', type=str, required=True)
     parser_train.add_argument('-ed', '--embeddings-domains', help='Embeddings for domain', type=str, required=False)
+    parser_train.add_argument('-l', '--lower', action='store_true')
     parser_train.add_argument('-epochs', '--epochs', help='Epochs', type=int, default=200)
     parser_train.add_argument('-batch', '--batch', help='# batch', type=int, default=16)
 
@@ -410,7 +411,7 @@ def main():
                 vocabulary.add(w)
 
             reader = TextDomainReader(input, args.max_sequence_length_content, args.max_words_content, 
-                                      args.max_sequence_length_domains, args.max_words_domains, vocabulary, logging)
+                                      args.max_sequence_length_domains, args.max_words_domains, vocabulary, args.lower, logging)
 
         X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
         
