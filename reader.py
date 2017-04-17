@@ -83,7 +83,6 @@ class ParallelReader(object):
         self.pool = multiprocessing.Pool(processes)
         self.splitter = splitter
 
-
     def __getstate__(self):
         self_dict = self.__dict__.copy()
         del self_dict['pool']
@@ -171,7 +170,7 @@ class TextDomainReader(Reader):
     def __init__(self, input=None,
                  max_sequence_length_content=None, max_words_content=None, 
                  max_sequence_length_domains=None, max_words_domains=None, domains_vocabulary=None,
-                 tokenizer_content=None, tokenizer_domains=None, nb_classes=-1, logger=None):
+                 tokenizer_content=None, tokenizer_domains=None, nb_classes=-1, lower=False, logger=None):
         super(TextDomainReader, self).__init__(input)
 
         if input is None:
@@ -185,7 +184,8 @@ class TextDomainReader(Reader):
         self.nb_classes = nb_classes
         self.tokenizer_content = tokenizer_content
         self.tokenizer_domains = tokenizer_domains
-
+        self.lower = lower
+        
         if logger:
             self.logger = logger
         else:
@@ -200,7 +200,8 @@ class TextDomainReader(Reader):
             'domains_vocabulary',
             'nb_classes',
             'tokenizer_content',
-            'tokenizer_domains'
+            'tokenizer_domains',
+            'lower'
         ]
 
 
@@ -212,7 +213,6 @@ class TextDomainReader(Reader):
         return d
 
         
-
     def read_for_test(self):
         labels = []
         texts = []
@@ -225,7 +225,7 @@ class TextDomainReader(Reader):
             for label in l.split(','):
                 l = 0 if int(label) == 13 else int(label)
                 labels.append(l)
-                texts.append(' '.join(normalize_line(t)))
+                texts.append(' '.join(normalize_line(t, lower=self.lower)))
                 d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
                 selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
@@ -257,7 +257,7 @@ class TextDomainReader(Reader):
             for label in l.split(','):
                 l = 0 if int(label) == 13 else int(label)
                 labels.append(l)
-                texts.append(' '.join(normalize_line(t)))
+                texts.append(' '.join(normalize_line(t, lower=self.lower)))
 
                 d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
                 selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
