@@ -45,8 +45,96 @@ class WebClassifier(object):
         if reader is not None:
             self._create_model()
 
+        
+    def _create_model(self): 
+        content_input = Input(shape=(self.reader.max_sequence_length_content, ))
+        content = Embedding(
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content, 
+            weights=[self.embeddings_weights_content],
+            input_length=self.reader.max_sequence_length_content,
+            trainable=True
+        )(content_input)
+        content = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content)
+        content = GlobalMaxPooling1D()(content)
+        
+        content2 = Embedding(
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content, 
+            weights=[self.embeddings_weights_content],
+            input_length=self.reader.max_sequence_length_content,
+            trainable=False
+        )(content_input)
+        content2 = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content2)
+        content2 = GlobalMaxPooling1D()(content2)
+                
+        domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
+        domain = Embedding(
+            input_dim=self.input_dim_domains,
+            output_dim=self.embeddings_dim_domains, 
+            weights=[self.embeddings_weights_domains],
+            input_length=self.reader.max_sequence_length_domains,
+            trainable=True
+        )(domain_input)
+        
+        domain = Flatten()(domain)
+        x = keras.layers.concatenate([content, content2, domain])
+        x1 = keras.layers.average([content, content2])
+        x = keras.layers.concatenate([x, x1])
+        x = Dense(128, activation='relu')(x)
 
-    def _create_model(self):
+        output = Dense(self.reader.nb_classes, activation='softmax')(x)
+
+        self.model = Model(inputs=[content_input, domain_input], outputs=output)
+        self.model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        
+
+    def _create_model_2(self): 
+        content_input = Input(shape=(self.reader.max_sequence_length_content, ))
+        content = Embedding(
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content, 
+            weights=[self.embeddings_weights_content],
+            input_length=self.reader.max_sequence_length_content,
+            trainable=True
+        )(content_input)
+        content = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content)
+        content = GlobalMaxPooling1D()(content)
+
+        
+        content2 = Embedding(
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content, 
+            weights=[self.embeddings_weights_content],
+            input_length=self.reader.max_sequence_length_content,
+            trainable=False
+        )(content_input)
+        content2 = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content2)
+        content2 = Convolution1D(filters=512, kernel_size=5, padding='same', activation='relu')(content2)
+        content2 = Convolution1D(filters=256, kernel_size=5, padding='same', activation='relu')(content2)
+        content2 = GlobalMaxPooling1D()(content2)
+                
+        domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
+        domain = Embedding(
+            input_dim=self.input_dim_domains,
+            output_dim=self.embeddings_dim_domains, 
+            weights=[self.embeddings_weights_domains],
+            input_length=self.reader.max_sequence_length_domains,
+            trainable=True
+        )(domain_input)
+        domain = Flatten()(domain)
+
+        x = keras.layers.concatenate([content, content2, domain])
+        x = Dense(32, activation='relu')(x)
+        output = Dense(self.reader.nb_classes, activation='softmax')(x)
+
+        self.model = Model(inputs=[content_input, domain_input], outputs=output)
+        self.model.compile(loss='categorical_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+
+        
+    def _create_model_1(self):
         content_input = Input(shape=(self.reader.max_sequence_length_content, ))
         content = Embedding(
             input_dim=self.input_dim_content,
@@ -60,50 +148,20 @@ class WebClassifier(object):
 
         # Convolutional block
         conv_blocks = []
-        for sz in (3, 5, 8, 12):
-            conv = Convolution1D(filters=256,
+        for sz in (3,4,5,6,7,8,9,10):
+            conv = Convolution1D(filters=32,
                                  kernel_size=sz,
                                  padding="valid",
                                  activation="relu",
                                  strides=1)(content)
             
-            conv = MaxPooling1D(pool_size=2)(conv)
+            conv = MaxPooling1D(pool_size=5)(conv)
             conv = Flatten()(conv)
             conv_blocks.append(conv)
         content = Concatenate()(conv_blocks)
         content = Dropout(0.8)(content)
 
-        domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
-        domain = Embedding(
-            input_dim=self.input_dim_domains,
-            output_dim=self.embeddings_dim_domains, 
-            weights=[self.embeddings_weights_domains],
-            input_length=self.reader.max_sequence_length_domains,
-            trainable=True
-        )(domain_input)
-        domain = Flatten()(domain)
-        
-        x = keras.layers.concatenate([content, domain])
-        x = Dense(32, activation='relu')(x)
-        output = Dense(self.reader.nb_classes, activation='softmax')(x)
-
-        self.model = Model(inputs=[content_input, domain_input], outputs=output)
-        self.model.compile(loss='categorical_crossentropy',
-              optimizer='adam',
-              metrics=['accuracy'])
-
-        
-    def _create_model_2(self): 
-        content_input = Input(shape=(self.reader.max_sequence_length_content, ))
-        content = Embedding(
-            input_dim=self.input_dim_content,
-            output_dim=self.embeddings_dim_content, 
-            weights=[self.embeddings_weights_content],
-            input_length=self.reader.max_sequence_length_content,
-            trainable=True
-        )(content_input)
-        content = Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu')(content)
-        content = GlobalMaxPooling1D()(content)
+        content = Dense(256, activation='relu')(content)
         
         domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
         domain = Embedding(
@@ -123,7 +181,7 @@ class WebClassifier(object):
         self.model.compile(loss='categorical_crossentropy',
               optimizer='adam',
               metrics=['accuracy'])
-        
+
 
     def _create_model_sequential(self):
         content = Sequential()
@@ -136,18 +194,18 @@ class WebClassifier(object):
         ))
 
         content.add(Dropout(0.2))
-        # content.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='valid', activation='relu'))
+        # content.add(Convolution1D(nb_filter=128, filter_length=5, padding='valid', activation='relu'))
         # content.add(MaxPooling1D(5))
 
-        # content.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='valid', activation='relu'))
+        # content.add(Convolution1D(nb_filter=128, filter_length=5, padding='valid', activation='relu'))
         # content.add(MaxPooling1D(5))
 
-        # content.add(Convolution1D(nb_filter=128, filter_length=5, border_mode='valid', activation='relu'))
+        # content.add(Convolution1D(nb_filter=128, filter_length=5, padding='valid', activation='relu'))
         # content.add(MaxPooling1D(35))
 
-        content.add(Convolution1D(filters=1024, kernel_size=5, border_mode='same', activation='relu'))
-        # content.add(Convolution1D(filters=512, kernel_size=5, border_mode='same', activation='relu'))
-        # content.add(Convolution1D(filters=256, kernel_size=5, border_mode='same', activation='relu'))
+        content.add(Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu'))
+        # content.add(Convolution1D(filters=512, kernel_size=5, padding='same', activation='relu'))
+        # content.add(Convolution1D(filters=256, kernel_size=5, padding='same', activation='relu'))
         content.add(GlobalMaxPooling1D())
 
         #content.add(Flatten())
@@ -167,7 +225,7 @@ class WebClassifier(object):
 
         domain.add(Flatten())
 
-        # domain.add(Convolution1D(nb_filter=128, filter_length=3, border_mode='same', activation='relu'))
+        # domain.add(Convolution1D(nb_filter=128, filter_length=3, padding='same', activation='relu'))
         # domain.add(GlobalMaxPooling1D())
         domain.add(Dense(64))
 
@@ -355,7 +413,7 @@ def main():
                                       args.max_sequence_length_domains, args.max_words_domains, vocabulary, logging)
 
         X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
-
+        
         logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
         num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
