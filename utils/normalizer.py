@@ -28,7 +28,7 @@ def normalize(input=sys.stdin):
     return texts
 
 
-def multi_normalize(line, lower=False):
+def multi_normalize(line):
     tweetTokenizer = TweetTokenizer()
     texts = []
     sentences = line.strip().split('___deep_classifier_project___')
@@ -37,8 +37,8 @@ def multi_normalize(line, lower=False):
         sentence = ' '.join(tweetTokenizer.tokenize(sentence)).encode('utf-8')
         s = re.sub(r'\d', '0', sentence)
         s = ' '.join([w for w in s.split() if len(w.strip().decode('utf-8')) > 2])
-        if lower:
-            s.lower()
+        if g_lower:
+            s = s.lower()
         texts.append(s)
     return texts
     
@@ -50,12 +50,24 @@ def normalize_line(line, lower=False):
     for sentence in sentences:
         sentence = ' '.join(tweetTokenizer.tokenize(sentence)).encode('utf-8')
         s = re.sub(r'\d', '0', sentence)
-        texts.append(' '.join([w for w in s.split() if len(w) > 2]))
-    #tokenizer.fit_on_texts(texts)
+        s = ' '.join([w for w in s.split() if len(w) > 2])
+        if lower:
+            s = s.lower()
+        texts.append(s)
     return texts
 
+g_lower = False
+
+
 def main():
-    pool = multiprocessing.Pool(18)
+
+    lower = True if sys.argv[1] == '--lower' else False
+
+    def initialize(lower):
+        global g_lower
+        g_lower = lower
+        
+    pool = multiprocessing.Pool(18, initialize, (lower, ))
 
     for r in pool.imap_unordered(multi_normalize, sys.stdin, 5):
         for sentence in r:
