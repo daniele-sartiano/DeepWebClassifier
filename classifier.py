@@ -78,9 +78,10 @@ class WebClassifier(object):
         )(domain_input)
         
         domain = Flatten()(domain)
+        #x = keras.layers.concatenate([content, domain])
         x = keras.layers.concatenate([content, content2, domain])
-        x1 = keras.layers.average([content, content2])
-        x = keras.layers.concatenate([x, x1])
+        # x1 = keras.layers.average([content, content2])
+        # x = keras.layers.concatenate([x, x1])
         x = Dense(128, activation='relu')(x)
 
         output = Dense(self.reader.nb_classes, activation='softmax')(x)
@@ -407,11 +408,15 @@ def main():
                     vocabulary = set()
                     continue
                 vocabulary.add(w.split(' ')[0].strip().lower())
-            for w in ['di', 'a', 'da', 'in', 'su', 'il', 'lo', 'la', 'un', 'e', 'i', 'o', 'al', 'd', 'l', 'c']:
-                vocabulary.add(w)
 
-            reader = TextDomainReader(input, args.max_sequence_length_content, args.max_words_content, 
-                                      args.max_sequence_length_domains, args.max_words_domains, vocabulary, args.lower, logging)
+            reader = TextDomainReader(input=input, 
+                                      max_sequence_length_content=args.max_sequence_length_content, 
+                                      max_words_content=args.max_words_content, 
+                                      max_sequence_length_domains=args.max_sequence_length_domains, 
+                                      max_words_domains=args.max_words_domains, 
+                                      domains_vocabulary=vocabulary, 
+                                      lower=args.lower, 
+                                      logger=logging)
 
         X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
         
