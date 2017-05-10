@@ -15,11 +15,15 @@ from types import MethodType
 
 class Splitter(object):
     MIN_LEN = 2
+    
+    OTHER = ['di', 'a', 'da', 'in', 'su', 'il', 'lo', 'la', 'un', 'e', 'i', 'o', 'al', 'd', 'l', 'c']
 
     def __init__(self, resource):
         self.vocabulary = set()
         for token in resource:
             self.vocabulary.add(token.strip().lower())
+        for w in self.OTHER:
+            self.vocabulary.add(w)
 
  
     def ngrams(self, word):
@@ -42,9 +46,12 @@ class Splitter(object):
     def split(self, word):
         for combinations in self.ngrams(word):
             for tokens in self.merge('', combinations):
-                splitted = tokens.split()
-                yield splitted, sum([len(tok)/float(len(tokens)) for tok in splitted])
+                split = tokens.split()
+                yield split, sum([len(tok)/float(len(tokens)) for tok in split])
 
+    
+    def inVocabulary(self, word):
+        return (word in self.vocabulary and word not in self.OTHER)
 
 
 def _pickle_method(method):
@@ -110,6 +117,7 @@ class ParallelReader(object):
         for label in l.split(','):
             l = 0 if int(label) == 13 else int(label)
             return d, l, content, domain_words
+
 
 
 pickle(MethodType, _pickle_method, _unpickle_method)
@@ -256,14 +264,16 @@ class TextDomainReader(Reader):
             d, t, l = line.strip().split('\t')
             for label in l.split(','):
                 l = 0 if int(label) == 13 else int(label)
+                #l = int(label)-1
                 labels.append(l)
                 texts.append(' '.join(normalize_line(t, lower=self.lower)))
 
                 d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
+                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+                print >> sys.stderr, d, ' '.join(selected) if len(selected) > 0 else d[:-3]
 
-        self.nb_classes = len(set(labels))
+        self.nb_classes = len(set(labels)) #43
 
         self.logger.info('collecting domains sequences')
         
