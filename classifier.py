@@ -48,25 +48,25 @@ class WebClassifier(object):
         
     def _create_model(self): 
         content_input = Input(shape=(self.reader.max_sequence_length_content, ))
-        content = Embedding(
+        content_trainable = Embedding(
             input_dim=self.input_dim_content,
             output_dim=self.embeddings_dim_content, 
             weights=[self.embeddings_weights_content],
             input_length=self.reader.max_sequence_length_content,
             trainable=True
         )(content_input)
-        content = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content)
-        content = GlobalMaxPooling1D()(content)
+        content_trainable = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content_trainable)
+        content_trainable = GlobalMaxPooling1D()(content_trainable)
         
-        content2 = Embedding(
+        content_not_trainable = Embedding(
             input_dim=self.input_dim_content,
             output_dim=self.embeddings_dim_content, 
             weights=[self.embeddings_weights_content],
             input_length=self.reader.max_sequence_length_content,
             trainable=False
         )(content_input)
-        content2 = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content2)
-        content2 = GlobalMaxPooling1D()(content2)
+        content_not_trainable = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content_not_trainable)
+        content_not_trainable = GlobalMaxPooling1D()(content_not_trainable)
                 
         domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
         domain = Embedding(
@@ -78,11 +78,16 @@ class WebClassifier(object):
         )(domain_input)
         
         domain = Flatten()(domain)
-        #x = keras.layers.concatenate([content, domain])
-        x = keras.layers.concatenate([content, content2, domain])
-        # x1 = keras.layers.average([content, content2])
-        # x = keras.layers.concatenate([x, x1])
-        x = Dense(128, activation='relu')(x)
+    
+        x = keras.layers.concatenate([content_trainable, content_not_trainable, domain])
+        #x1 = keras.layers.average([content_trainable, content_not_trainable])
+        #x = keras.layers.concatenate([x, x1])
+        #x = Dense(128, activation='relu')(x)
+        #x = Dense(64, activation='relu')(x)
+
+        # x = Dense(128, activation='relu')(x)
+        # x = Dense(64, activation='relu')(x)
+        x = Dense(32, activation='relu')(x)
 
         output = Dense(self.reader.nb_classes, activation='softmax')(x)
 
@@ -419,7 +424,7 @@ def main():
                                       logger=logging)
 
         X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
-        
+
         logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
         num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,

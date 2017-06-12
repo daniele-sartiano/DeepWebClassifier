@@ -271,7 +271,7 @@ class TextDomainReader(Reader):
                 d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
                 selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
-                print >> sys.stderr, d, ' '.join(selected) if len(selected) > 0 else d[:-3]
+                #print >> sys.stderr, d, ' '.join(selected) if len(selected) > 0 else d[:-3]
 
         self.nb_classes = len(set(labels)) #43
 
@@ -280,14 +280,14 @@ class TextDomainReader(Reader):
         self.tokenizer_domains = Tokenizer(num_words=self.max_words_domains, lower=False)
         self.tokenizer_domains.fit_on_texts(domains)
         sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
-        sequences_domains = sequence.pad_sequences(sequences_domains, maxlen=self.max_sequence_length_domains)
+        sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
 
         self.logger.info('collecting content sequences')
 
         self.tokenizer_content = Tokenizer(num_words=self.max_words_content, lower=False)
         self.tokenizer_content.fit_on_texts(texts)
         sequences_content = self.tokenizer_content.texts_to_sequences(texts)
-        sequences_content = sequence.pad_sequences(sequences_content, maxlen=self.max_sequence_length_content)
+        sequences_content = sequence.pad_sequences(sequences_content, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
         #sequences_content = numpy.asarray([self.extract_windows(seq, 5) for seq in sequences_content])
         
         self.logger.info('Splitting corpus')

@@ -89,12 +89,12 @@ BATCH=64
 model$(LOWER): $(DATA)/fine.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE)$(LOWER).w2v.txt $(DATA)/vectors-wikipedia-lower.txt
 	./classifier.py train --max-words-content $(MAX_WORDS) --max-sequence-length-content $(MAX_SEQUENCE_LENGTH) --embeddings $(word 2,$^) \
 		--max-words-domains $(MAX_WORDS) --max-sequence-length-domains $(MAX_SEQUENCE_LENGTH_DOMAINS) \
-		--embeddings-domains $(word 3,$^) --batch $(BATCH) -f `date +%s`$(LOWER).model $(P_LOWER) < $<
+		--embeddings-domains $(word 3,$^) --batch $(BATCH) -f $(DATA)/`date +%s`$(LOWER).model $(P_LOWER) < $<
 
 model_ict$(LOWER): $(DATA)/fine_ict.txt $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE)$(LOWER).w2v.txt $(DATA)/vectors-wikipedia-lower.txt
 	./classifier.py train --max-words-content $(MAX_WORDS) --max-sequence-length-content $(MAX_SEQUENCE_LENGTH) --embeddings $(word 2,$^) \
 		--max-words-domains $(MAX_WORDS) --max-sequence-length-domains $(MAX_SEQUENCE_LENGTH_DOMAINS) \
-		--embeddings-domains $(word 3,$^) --batch $(BATCH) -f `date +%s`_ict_$(LOWER).model $(P_LOWER) < $<
+		--embeddings-domains $(word 3,$^) --batch $(BATCH) -f $(DATA)/`date +%s`_ict_$(LOWER).model $(P_LOWER) < $<
 
 
 MODEL=
@@ -112,7 +112,7 @@ model.tuned: $(DATA)/fine.txt data/word_embeddings_300.tuning.txt $(DATA)/vector
 model.wiki: $(DATA)/fine.txt $(DATA)/vectors-wikipedia.txt
 	./classifier.py train --max-words-content $(MAX_WORDS) --max-sequence-length-content $(MAX_SEQUENCE_LENGTH) --embeddings $(word 2,$^) \
 		--max-words-domains $(MAX_WORDS) --max-sequence-length-domains $(MAX_SEQUENCE_LENGTH_DOMAINS) \
-		--embeddings-domains $(word 2,$^) --batch $(BATCH) -f wiki-`date +%s`.model < $<
+		--embeddings-domains $(word 2,$^) --batch $(BATCH) -f $(DATA)/wiki-`date +%s`.model < $<
 
 
 test.txt: test
