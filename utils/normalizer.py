@@ -1,11 +1,24 @@
 #!/usr/bin/env python
 
 import sys
+import math
 import re
 from keras.preprocessing.text import Tokenizer, text_to_word_sequence
 from nltk.tokenize import TweetTokenizer
 
 import multiprocessing
+
+sys.path.append('../subword-nmt')
+from apply_bpe import BPE
+
+def windows(sentence, n=3, end='<END>'):
+    for token in sentence.split():
+        prev = 0
+        s = []
+        for i in xrange(0, int(math.ceil(len(token)/float(n)))):
+            s.append(token[i*n:(i+1)*n])
+        s[-1] = '%s%s' % (s[-1], end)
+        yield s
 
 
 def normalize(input=sys.stdin):
@@ -42,22 +55,35 @@ def multi_normalize(line):
         texts.append(s)
     return texts
     
-def normalize_line(line, lower=False):
+def normalize_line(line, lower=False, vocabulary=None, window_size=None, bpe=None):
     tweetTokenizer = TweetTokenizer()
+
+    if bpe:
+        bpe_encoder = BPE(open(bpe), '@@', None, None)
 
     sentences = line.strip().split('___deep_classifier_project___')
     texts = []
+    
+    import codecs
+
     for sentence in sentences:
         sentence = ' '.join(tweetTokenizer.tokenize(sentence)).encode('utf-8')
         s = re.sub(r'\d', '0', sentence)
-        s = ' '.join([w for w in s.split() if len(w) > 2])
+        if vocabulary:
+            s = ' '.join([w for w in s.split() if len(w) > 2 and w in vocabulary])
+        else:
+            s = ' '.join([w for w in s.split() if len(w) > 2])
         if lower:
             s = s.lower()
+        if window_size:
+            r = ' '.join([' '.join(el) for el in windows(s, window_size)])
+            s = r
+        if bpe:
+            s = bpe_encoder.segment(codecs.decode(s, 'utf-8')).strip().encode('utf-8')
         texts.append(s)
     return texts
 
 g_lower = False
-
 
 def main():
 

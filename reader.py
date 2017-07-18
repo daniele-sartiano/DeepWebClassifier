@@ -144,7 +144,7 @@ class Reader(object):
         
 
     @staticmethod
-    def load_vectors(f):
+    def load_vectors(f, lower=True):
         embeddings_index = {}
         embeddings_size = None
         for line in f:
@@ -152,7 +152,7 @@ class Reader(object):
                 embeddings_size = int(line.strip().split()[-1])
                 continue
             values = line.split()
-            word = values[0]
+            word = values[0].lower() if lower else value[0]
             coefs = numpy.asarray(values[1:], dtype='float32')
             embeddings_index[word] = coefs
         f.close()
@@ -160,11 +160,14 @@ class Reader(object):
         return embeddings_index, embeddings_size
 
     @staticmethod
-    def read_embeddings(f, max_words, word_index):
+    def read_embeddings(f, max_words, word_index, lower=True):
         # embeddings matrix
-        embeddings_index, embeddings_size = Reader.load_vectors(open(f))
+        embeddings_index, embeddings_size = Reader.load_vectors(open(f), lower)
+        print >> sys.stderr, '*'*80
+        print >> sys.stderr, len(embeddings_index)
         num_words = min(max_words, len(word_index))
         embedding_matrix = numpy.zeros((num_words + 1, embeddings_size))
+        unk = []
         for word, i in word_index.items():
             if i > max_words:
                 continue
@@ -172,13 +175,37 @@ class Reader(object):
             if embedding_vector is not None:
                 # words not found in embedding index will be all-zeros.
                 embedding_matrix[i] = embedding_vector
+            else:
+                unk.append(word)
+        print >> sys.stderr, 'unk words', len(unk)
+        print >> sys.stderr, unk
+        print >> sys.stderr, '*'*80
         return num_words, embedding_matrix, embeddings_size
+
+    @staticmethod
+    def discard_zeros(X, embeddings):
+        debug_counter = 0
+        X_post = []
+        for example in X:
+            ex = []
+            for index in example:
+                if not embeddings[index].any():
+                    debug_counter += 1
+                    continue
+                ex.append(embeddings[index])
+            X_post.append(ex)
+        print >> sys.stderr, 'discard zeros: ', debug_counter
+        return numpy.asarray(X_post)
+
 
 class TextDomainReader(Reader):
     def __init__(self, input=None,
                  max_sequence_length_content=None, max_words_content=None, 
-                 max_sequence_length_domains=None, max_words_domains=None, domains_vocabulary=None,
-                 tokenizer_content=None, tokenizer_domains=None, nb_classes=-1, lower=False, logger=None):
+                 max_sequence_length_domains=None, max_words_domains=None, 
+                 content_vocabulary=None, domains_vocabulary=None,
+                 tokenizer_content=None, tokenizer_domains=None,
+                 nb_classes=-1, lower=False, logger=None, bpe=None, window=None):
+
         super(TextDomainReader, self).__init__(input)
 
         if input is None:
@@ -187,12 +214,15 @@ class TextDomainReader(Reader):
         self.max_words_content = max_words_content
         self.max_sequence_length_domains = max_sequence_length_domains
         self.max_words_domains = max_words_domains
+        self.content_vocabulary = content_vocabulary
         self.domains_vocabulary = domains_vocabulary
         self.splitter = Splitter(self.domains_vocabulary)
         self.nb_classes = nb_classes
         self.tokenizer_content = tokenizer_content
         self.tokenizer_domains = tokenizer_domains
         self.lower = lower
+        self.window = window
+        self.bpe = bpe
         
         if logger:
             self.logger = logger
@@ -205,6 +235,7 @@ class TextDomainReader(Reader):
             'max_words_content',
             'max_sequence_length_domains',
             'max_words_domains',
+            'content_vocabulary',
             'domains_vocabulary',
             'nb_classes',
             'tokenizer_content',
@@ -260,14 +291,22 @@ class TextDomainReader(Reader):
 
         self.logger.info('Reading corpus')
         
-        for line in self.input:
+        for i, line in enumerate(self.input):
             d, t, l = line.strip().split('\t')
             for label in l.split(','):
                 l = 0 if int(label) == 13 else int(label)
                 #l = int(label)-1
                 labels.append(l)
-                texts.append(' '.join(normalize_line(t, lower=self.lower)))
+            
+                
+                if self.window:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, window=self.window)))
+                elif self.bpe:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, bpe=self.bpe)))
+                else:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)))
 
+                #print sum([len(s.split(' ')) for s in normalize_line(t, lower=self.lower)]), 'vs', sum([len(s.split(' ')) for s in normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)])
                 d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
                 selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
