@@ -21,11 +21,12 @@ def main():
     parser.add_argument('-s', '--size', help='word embeddings size', type=int, default=300)
     parser.add_argument('-m', '--max-vocab-size', help='max vocab size', type=int, default=1000000)
     parser.add_argument('-mc', '--min-count', help='min count', type=int, default=5)
+    parser.add_argument('-wi', '--window', help='window', type=int, default=5)
     parser.add_argument('-w', '--workers', help='# workers', type=int, default=18)
 
     args = parser.parse_args()
 
-    model = gensim.models.word2vec.Word2Vec(SentenceIterator(), size=args.size, max_vocab_size=args.max_vocab_size, min_count=args.min_count, workers=args.workers)
+    model = gensim.models.word2vec.Word2Vec(SentenceIterator(), window=args.window, size=args.size, max_vocab_size=args.max_vocab_size, min_count=args.min_count, workers=args.workers)
 
     model.save('data/word_embeddings_gensim_%s.bin' % args.size)
     model.wv.save_word2vec_format(args.filename, binary=False)
