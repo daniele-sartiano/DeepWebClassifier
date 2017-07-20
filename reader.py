@@ -240,7 +240,9 @@ class TextDomainReader(Reader):
             'nb_classes',
             'tokenizer_content',
             'tokenizer_domains',
-            'lower'
+            'lower',
+            'window',
+            'bpe'
         ]
 
 
@@ -251,23 +253,35 @@ class TextDomainReader(Reader):
             d.append(sequence[i:i+window_size])
         return d
 
-        
-    def read_for_test(self):
+
+    def _read(self):
         labels = []
         texts = []
         domains = []
 
         self.logger.info('Reading corpus')
         
-        for line in self.input:
+        for i, line in enumerate(self.input):
             d, t, l = line.strip().split('\t')
             for label in l.split(','):
                 l = 0 if int(label) == 13 else int(label)
                 labels.append(l)
-                texts.append(' '.join(normalize_line(t, lower=self.lower)))
+                            
+                if self.window:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, window=self.window)))
+                elif self.bpe:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, bpe=self.bpe)))
+                else:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)))
+
                 d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2]), key=lambda x: len(x), reverse=True)
+                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
                 domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+        return labels, texts, domains
+        
+        
+    def read_for_test(self):
+        labels, texts, domains = self._read()
 
         sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
         sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
@@ -285,33 +299,7 @@ class TextDomainReader(Reader):
 
         
     def read(self):
-        labels = []
-        texts = []
-        domains = []
-
-        self.logger.info('Reading corpus')
-        
-        for i, line in enumerate(self.input):
-            d, t, l = line.strip().split('\t')
-            for label in l.split(','):
-                l = 0 if int(label) == 13 else int(label)
-                #l = int(label)-1
-                labels.append(l)
-            
-                
-                if self.window:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, window=self.window)))
-                elif self.bpe:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, bpe=self.bpe)))
-                else:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)))
-
-                #print sum([len(s.split(' ')) for s in normalize_line(t, lower=self.lower)]), 'vs', sum([len(s.split(' ')) for s in normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)])
-                d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
-                domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
-                #print >> sys.stderr, d, ' '.join(selected) if len(selected) > 0 else d[:-3]
-
+        labels, texts, domains = self._read()
         self.nb_classes = len(set(labels)) #43
 
         self.logger.info('collecting domains sequences')
