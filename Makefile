@@ -101,7 +101,7 @@ $(DATA)/word_embeddings_$(EMBEDDINGS_SIZE)$(LOWER).txt.windows: $(DATA)/w2v_corp
            -cbow 1 -size $(EMBEDDINGS_SIZE) -window 10 -min-count 5 -negative 0 -hs 1 \
            -sample 1e-3 -threads 18 -debug 2
 
-MAX_WORDS = 100000
+MAX_WORDS = 1000000
 MAX_SEQUENCE_LENGTH = 1000
 MAX_SEQUENCE_LENGTH_DOMAINS = 10
 
