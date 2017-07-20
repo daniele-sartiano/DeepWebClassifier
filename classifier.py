@@ -434,9 +434,6 @@ def main():
                     continue
                 vocabulary.add(w.split(' ')[0].strip().lower())
 
-            # #TODO TEST
-            # embeddings, _ = Reader.load_vectors(open(args.embeddings))
-
             reader = TextDomainReader(input=input, 
                                       max_sequence_length_content=args.max_sequence_length_content, 
                                       max_words_content=args.max_words_content, 
