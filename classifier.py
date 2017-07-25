@@ -63,16 +63,17 @@ class WebClassifier(object):
 
         # Convolutional block
         conv_blocks = []
-        for sz in (3,4,5,6,7,8,9,10):
-            conv = Convolution1D(filters=256,
-                                 kernel_size=sz,
-                                 padding="valid",
-                                 activation="relu",
-                                 strides=1)(content_embeddings)
+        for f in [2**x for x in range(1,11)]:
+            for sz in range(3,6):
+                conv = Convolution1D(filters=f,
+                                     kernel_size=sz,
+                                     padding="valid",
+                                     activation="relu",
+                                     strides=1)(content_embeddings)
             
-            conv = MaxPooling1D(pool_size=5)(conv)
-            conv = Flatten()(conv)
-            conv_blocks.append(conv)
+                conv = MaxPooling1D(pool_size=5)(conv)
+                conv = Flatten()(conv)
+                conv_blocks.append(conv)
         content_conv_block = Concatenate()(conv_blocks)
         content_conv_block = Dropout(0.8)(content_conv_block)
 
@@ -504,6 +505,8 @@ def main():
         X, y, y_orig = webClassifier.reader.read_for_test()
         webClassifier.evaluate(X, y)
         y_pred, p = webClassifier.predict(X)
+        for i, el in enumerate(y_pred):
+            print >> sys.stderr, el, p[i]
         webClassifier.modelSummary()
         logging.info('\n%s' % classification_report(y_orig, y_pred))
         logging.info('\n%s' % confusion_matrix(y_orig, y_pred))
