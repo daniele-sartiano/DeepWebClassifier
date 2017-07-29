@@ -10,7 +10,7 @@ import pandas
 import numpy
 import math
 import keras
-from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D
+from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D, Reshape
 from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
 #from keras.layers.merge import Concatenate
@@ -60,39 +60,6 @@ class WebClassifier(object):
         content_conv = Convolution1D(filters=2048, kernel_size=7, padding='same', activation='relu')(content_embeddings)
         content_global_max_pool = GlobalMaxPooling1D()(content_conv)
         content_trainable = Dropout(0.8)(content_global_max_pool)
-
-        # content_max_pool = MaxPooling1D(pool_size=5)(content_embeddings)
-        # content_lstm = LSTM(256, dropout=0.2, recurrent_dropout=0.2)(content_max_pool)
-        # content_trainable = keras.layers.concatenate([content_global_max_pool, content_lstm])
-
-        # # Convolutional block
-        # conv_blocks = []
-        # for f in [2**x for x in range(10,11)]:
-        #     for sz in range(3,6):
-        #         conv = Convolution1D(filters=f,
-        #                              kernel_size=sz,
-        #                              padding="valid",
-        #                              activation="relu",
-        #                              strides=1)(content_embeddings)
-            
-        #         conv = MaxPooling1D(pool_size=5)(conv)
-        #         conv = Flatten()(conv)
-        #         conv_blocks.append(conv)
-        # content_conv_block = Concatenate()(conv_blocks)
-        # content_conv_block = Dropout(0.8)(content_conv_block)
-
-        # content_conv_block = Dense(256, activation='relu')(content_conv_block)
-
-
-        # content_not_trainable = Embedding(
-        #     input_dim=self.input_dim_content,
-        #     output_dim=self.embeddings_dim_content, 
-        #     weights=[self.embeddings_weights_content],
-        #     input_length=self.reader.max_sequence_length_content,
-        #     trainable=False
-        # )(content_input)
-        # content_not_trainable = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content_not_trainable)
-        # content_not_trainable = GlobalMaxPooling1D()(content_not_trainable)
                 
         domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
         domain_embeddings = Embedding(
@@ -105,14 +72,15 @@ class WebClassifier(object):
         domain_embeddings = Dropout(0.5)(domain_embeddings)
         domain = Flatten()(domain_embeddings)
         
+        content_embeddings_reshape = Reshape((-1,))(content_embeddings)
+        content_embeddings_reshape = Dropout(0.5)(content_embeddings_reshape)
+
         x = keras.layers.concatenate([content_trainable, domain])
         
         # x = keras.layers.concatenate([content_trainable, content_not_trainable, domain])
         # x = keras.layers.concatenate([content_trainable, content_conv_block, domain])
         #x1 = keras.layers.average([content_trainable, content_not_trainable])
         #x = keras.layers.concatenate([x, x1])
-        # x = Dense(128, activation='relu')(x)
-        # x = Dense(64, activation='relu')(x)
         x = Dense(32, activation='relu')(x)
         x = Dropout(0.5)(x)
 
