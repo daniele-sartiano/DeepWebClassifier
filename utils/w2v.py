@@ -26,6 +26,7 @@ def main():
     parser.add_argument('-s', '--size', help='word embeddings size', type=int, default=300)
     parser.add_argument('-m', '--max-vocab-size', help='max vocab size', type=int, default=1000000)
     parser.add_argument('-mc', '--min-count', help='min count', type=int, default=5)
+    parser.add_argument('-wi', '--window', help='window', type=int, default=5)
     parser.add_argument('-w', '--workers', help='# workers', type=int, default=18)
     parser.add_argument('-l', '--load', help='# load', action='store_true')
 
@@ -36,7 +37,6 @@ def main():
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s')
     logging.root.setLevel(level=logging.INFO)
     logger.info("running %s" % ' '.join(sys.argv))
-
 
     if args.load:
         model = gensim.models.Word2Vec.load('data/word_embeddings_gensim_%s.bin' % args.size)
