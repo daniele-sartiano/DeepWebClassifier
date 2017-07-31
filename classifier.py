@@ -49,10 +49,11 @@ class WebClassifier(object):
         
     def _create_model(self): 
         content_input = Input(shape=(self.reader.max_sequence_length_content,))
+        content_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content else None
         content_embeddings = Embedding(
             input_dim=self.input_dim_content,
             output_dim=self.embeddings_dim_content, 
-            weights=[self.embeddings_weights_content],
+            weights=content_embeddings_weights,
             input_length=self.reader.max_sequence_length_content,
             trainable=True
         )(content_input)
@@ -366,7 +367,8 @@ def main():
     parser_train.add_argument('-msl', '--max-sequence-length-content', help='Max sequence length', type=int, required=True)
     parser_train.add_argument('-mwd', '--max-words-domains', help='Max words domains', type=int)
     parser_train.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
-    parser_train.add_argument('-e', '--embeddings', help='Embeddings', type=str, required=True)
+    parser_train.add_argument('-e', '--embeddings', help='Embeddings', type=str, default=None)
+    parser_train.add_argument('-es', '--embeddings-size', help='Embeddings size', type=int, default=300)
     parser_train.add_argument('-ed', '--embeddings-domains', help='Embeddings for domain', type=str, required=False)
     parser_train.add_argument('-l', '--lower', action='store_true')
     parser_train.add_argument('-epochs', '--epochs', help='Epochs', type=int, default=200)
@@ -424,18 +426,26 @@ def main():
         X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
         logging.info('X_train %s %s - y_train %s' % (len(X_train[0]), len(X_train[1]), len(y_train)))
 
-        logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
+        if args.embeddings:
+            logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
-        num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
-                                                                                    reader.max_words_content,
-                                                                                    reader.tokenizer_content.word_index, args.lower)
+            num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
+                                                                                                          reader.max_words_content,
+                                                                                                          reader.tokenizer_content.word_index,
+                                                                                                          args.lower)
+        else:
+            logging.info('No pretrained embedings: using the embeddings size %s, max words content %s, max sequence length %s content' % (args.embeddings_size, args.max_words_content, args.max_sequence_length_content))
+            num_words_content = reader.max_words_content
+            embedding_matrix_content = None
+            embeddings_size_content = args.embeddings_size
 
         logging.info('Reading Embedings: using the file %s, max words domains %s, max sequence length %s domains' % (args.embeddings_domains, args.max_words_domains, args.max_sequence_length_domains))
 
 
         num_words_domains, embedding_matrix_domains, embeddings_size_domains = Reader.read_embeddings(args.embeddings_domains,
-                                                                                    reader.max_words_domains,
-                                                                                    reader.tokenizer_domains.word_index, args.lower)
+                                                                                                      reader.max_words_domains,
+                                                                                                      reader.tokenizer_domains.word_index,
+                                                                                                      args.lower)
     
         webClassifier = WebClassifier(
             reader=reader,
