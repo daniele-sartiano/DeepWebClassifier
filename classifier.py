@@ -17,6 +17,7 @@ from keras.layers.embeddings import Embedding
 from keras.models import Sequential, Model, load_model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.layers.convolutional import Convolution1D, MaxPooling1D
+from keras.layers.local import LocallyConnected1D
 from keras import regularizers
 
 from sklearn.preprocessing import MinMaxScaler
@@ -49,18 +50,23 @@ class WebClassifier(object):
         
     def _create_model(self): 
         content_input = Input(shape=(self.reader.max_sequence_length_content,))
-        content_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content else None
+        content_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
         content_embeddings = Embedding(
             input_dim=self.input_dim_content,
-            output_dim=self.embeddings_dim_content, 
+            output_dim=self.embeddings_dim_content,
             weights=content_embeddings_weights,
             input_length=self.reader.max_sequence_length_content,
             trainable=True
         )(content_input)
         content_embeddings = Dropout(0.5)(content_embeddings)
-        content_conv = Convolution1D(filters=2048, kernel_size=7, padding='same', activation='relu')(content_embeddings)
+        content_conv = Convolution1D(filters=2048, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
+        #content_conv = LocallyConnected1D(filters=256, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
         content_global_max_pool = GlobalMaxPooling1D()(content_conv)
-        content_trainable = Dropout(0.8)(content_global_max_pool)
+        content_trainable = Dropout(0.5)(content_global_max_pool)
+
+        # content_conv_local = LocallyConnected1D(filters=1024, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
+        # content_global_max_pool_local = GlobalMaxPooling1D()(content_conv_local)
+        # content_trainable_local = Dropout(0.8)(content_global_max_pool_local)
                 
         domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
         domain_embeddings = Embedding(
@@ -72,9 +78,11 @@ class WebClassifier(object):
         )(domain_input)
         domain_embeddings = Dropout(0.5)(domain_embeddings)
         domain = Flatten()(domain_embeddings)
+
         
-        content_embeddings_reshape = Reshape((-1,))(content_embeddings)
-        content_embeddings_reshape = Dropout(0.5)(content_embeddings_reshape)
+        
+        # content_embeddings_reshape = Reshape((-1,))(content_embeddings)
+        # content_embeddings_reshape = Dropout(0.5)(content_embeddings_reshape)
 
         x = keras.layers.concatenate([content_trainable, domain])
         
@@ -250,7 +258,7 @@ class WebClassifier(object):
                        validation_split=validation_split,
                        validation_data=dev,
                        callbacks=[
-                           EarlyStopping(verbose=True, patience=5, monitor='val_loss'),
+                           EarlyStopping(verbose=True, patience=10, monitor='val_loss'),
                            ModelCheckpoint(self.file_model, monitor='val_loss', verbose=True, save_best_only=True)
                        ])
 

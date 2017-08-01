@@ -64,25 +64,24 @@ def normalize_line(line, lower=False, vocabulary=None, window_size=None, bpe=Non
     if bpe:
         bpe_encoder = BPE(open(bpe), '@@', None, None)
 
-    sentences = line.strip().split('___deep_classifier_project___')
+    sentences = codecs.decode(line, 'utf-8').strip().split('___deep_classifier_project___')
     texts = []
     
-    import codecs
-
     for sentence in sentences:
-        sentence = ' '.join(regexpTokenizer.tokenize(sentence)).encode('utf-8')
+        sentence = ' '.join(regexpTokenizer.tokenize(sentence))
         s = re.sub(r'\d', '0', sentence)
         if lower:
             s = s.lower()
         if vocabulary:
             s = ' '.join([w for w in s.split() if len(w) > 2 and w in vocabulary])
         else:
-            s = ' '.join([w for w in s.split() if len(w.strip().decode('utf-8')) > 2 and len(set(w.strip().decode('utf-8'))) > 1])
+            s = ' '.join([w for w in s.split() if len(w.strip()) > 2 and len(set(w.strip())) > 1])
         if window_size:
             r = ' '.join([' '.join(el) for el in windows(s, window_size)])
             s = r
         if bpe:
-            s = bpe_encoder.segment(codecs.decode(s, 'utf-8')).strip().encode('utf-8')
+            s = bpe_encoder.segment(s).strip()
+        s = s.encode('utf-8')
         if s:
             texts.append(s)
     return texts
