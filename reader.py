@@ -298,9 +298,9 @@ class TextDomainReader(Reader):
         return [X, X_domains], y, y_orig
 
         
-    def read(self):
+    def read(self, split=True):
         labels, texts, domains = self._read()
-        self.nb_classes = len(set(labels)) #43
+        self.nb_classes = 12 #len(set(labels)) #43
 
         self.logger.info('collecting domains sequences')
         
@@ -318,25 +318,28 @@ class TextDomainReader(Reader):
         #sequences_content = numpy.asarray([self.extract_windows(seq, 5) for seq in sequences_content])
         
         self.logger.info('Splitting corpus')
-        
-        rng_state = numpy.random.get_state()
-        numpy.random.shuffle(sequences_content)
-        numpy.random.set_state(rng_state)
-        numpy.random.shuffle(labels)
-        numpy.random.set_state(rng_state)
-        numpy.random.shuffle(sequences_domains)
 
-        toSplit = int(len(sequences_content) * 0.1)
-        X_dev = sequences_content[0:toSplit]
-        X_dev_domains = sequences_domains[0:toSplit]
+        if split:
+            rng_state = numpy.random.get_state()
+            numpy.random.shuffle(sequences_content)
+            numpy.random.set_state(rng_state)
+            numpy.random.shuffle(labels)
+            numpy.random.set_state(rng_state)
+            numpy.random.shuffle(sequences_domains)
 
-        y_dev_orig = labels[0:toSplit]
-        y_dev = np_utils.to_categorical(y_dev_orig, self.nb_classes)
-        
-        X_train = sequences_content[toSplit:]
-        X_train_domains = sequences_domains[toSplit:]
-        
-        y_train = np_utils.to_categorical(labels[toSplit:], self.nb_classes)
+            toSplit = int(len(sequences_content) * 0.1)
+            X_dev = sequences_content[0:toSplit]
+            X_dev_domains = sequences_domains[0:toSplit]
 
-        return [X_train, X_train_domains], y_train, [X_dev, X_dev_domains], y_dev, y_dev_orig
+            y_dev_orig = labels[0:toSplit]
+            y_dev = np_utils.to_categorical(y_dev_orig, self.nb_classes)
+            
+            X_train = sequences_content[toSplit:]
+            X_train_domains = sequences_domains[toSplit:]
+            
+            y_train = np_utils.to_categorical(labels[toSplit:], self.nb_classes)
 
+            return [X_train, X_train_domains], y_train, [X_dev, X_dev_domains], y_dev, y_dev_orig
+        else:
+            return [sequences_content, sequences_domains], np_utils.to_categorical(labels, self.nb_classes)
+            

@@ -383,6 +383,7 @@ def main():
     parser_train.add_argument('-batch', '--batch', help='# batch', type=int, default=16)
     parser_train.add_argument('-w', '--window', help='window', type=int, default=None)
     parser_train.add_argument('-bpe', '--bpe', help='bpe file', type=str, default=None)
+    parser_train.add_argument('-nsp', '--nosplit', help='don\'t split train/dev', action='store_true')
 
     for arg in common_args:
         parser_train.add_argument(*arg[0], **arg[1])
@@ -431,7 +432,11 @@ def main():
                                       window=args.window,
                                       bpe=args.bpe)
 
-        X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
+        if args.nosplit:
+            X_train, y_train = reader.read(False)
+        else:
+            X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
+
         logging.info('X_train %s %s - y_train %s' % (len(X_train[0]), len(X_train[1]), len(y_train)))
 
         if args.embeddings:
@@ -449,12 +454,11 @@ def main():
 
         logging.info('Reading Embedings: using the file %s, max words domains %s, max sequence length %s domains' % (args.embeddings_domains, args.max_words_domains, args.max_sequence_length_domains))
 
-
         num_words_domains, embedding_matrix_domains, embeddings_size_domains = Reader.read_embeddings(args.embeddings_domains,
                                                                                                       reader.max_words_domains,
                                                                                                       reader.tokenizer_domains.word_index,
                                                                                                       args.lower)
-    
+
         webClassifier = WebClassifier(
             reader=reader,
             file_model=args.file_model,
@@ -473,24 +477,26 @@ def main():
         webClassifier.save()
 
         webClassifier.load()
-        logging.info('Evalutaing the model')
-        webClassifier.evaluate(X_dev, y_dev) 
 
-        y_pred, p = webClassifier.predict(X_dev)
+        if not args.nosplit:
 
-        # predicted = open('predicted', 'w')
-        # for yy in y_pred:
-        #     print >> predicted, yy
-        # predicted.close()
+            logging.info('Evalutaing the model')
+            webClassifier.evaluate(X_dev, y_dev) 
 
+            y_pred, p = webClassifier.predict(X_dev)
+        
+            # predicted = open('predicted', 'w')
+            # for yy in y_pred:
+            #     print >> predicted, yy
+            # predicted.close()
 
-        #print(classification_report(numpy.argmax(y_test,axis=1), y_pred, target_names=['a', 'b']))
+            #print(classification_report(numpy.argmax(y_test,axis=1), y_pred, target_names=['a', 'b']))
+            logging.info('\n%s' % classification_report(y_dev_orig, y_pred))
+            logging.info('*'*80)
+            #print(confusion_matrix(numpy.argmax(y_test,axis=1), y_pred))
+            logging.info('\n%s' % confusion_matrix(y_dev_orig, y_pred))
 
         webClassifier.modelSummary()
-        logging.info('\n%s' % classification_report(y_dev_orig, y_pred))
-        logging.info('*'*80)
-        #print(confusion_matrix(numpy.argmax(y_test,axis=1), y_pred))
-        logging.info('\n%s' % confusion_matrix(y_dev_orig, y_pred))
 
     elif args.which == 'test':
         webClassifier = WebClassifier(file_model=args.file_model)
@@ -498,8 +504,8 @@ def main():
         X, y, y_orig = webClassifier.reader.read_for_test()
         webClassifier.evaluate(X, y)
         y_pred, p = webClassifier.predict(X)
-        for i, el in enumerate(y_pred):
-            print >> sys.stderr, el, p[i]
+        # for i, el in enumerate(y_pred):
+        #     print >> sys.stderr, el, p
         webClassifier.modelSummary()
         logging.info('\n%s' % classification_report(y_orig, y_pred))
         logging.info('\n%s' % confusion_matrix(y_orig, y_pred))
