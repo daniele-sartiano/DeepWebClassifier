@@ -501,5 +501,3 @@ class TextHeadingsDomainReader(TextDomainReader):
         
         
         return [sequences_content, sequences_domains, sequences_headings], np_utils.to_categorical(labels, self.nb_classes)
-            
->>>>>>> 6a50f66e9a3c8dc72760af8cd46c082421155f07
