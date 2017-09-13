@@ -10,13 +10,14 @@ import pandas
 import numpy
 import math
 import keras
-from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D
+from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D, Reshape
 from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
 #from keras.layers.merge import Concatenate
 from keras.models import Sequential, Model, load_model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.layers.convolutional import Convolution1D, MaxPooling1D
+from keras.layers.local import LocallyConnected1D
 from keras import regularizers
 
 from sklearn.preprocessing import MinMaxScaler
@@ -48,70 +49,40 @@ class WebClassifier(object):
 
         
     def _create_model(self): 
-        content_input = Input(shape=(self.reader.max_sequence_length_content, ))
+        content_input = Input(shape=(self.reader.max_sequence_length_content,))
+        content_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
         content_embeddings = Embedding(
             input_dim=self.input_dim_content,
-            output_dim=self.embeddings_dim_content, 
-            weights=[self.embeddings_weights_content],
+            output_dim=self.embeddings_dim_content,
+            weights=content_embeddings_weights,
             input_length=self.reader.max_sequence_length_content,
             trainable=True
         )(content_input)
+        content_embeddings = Dropout(0.5)(content_embeddings)
+        content_conv = Convolution1D(filters=2048, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
 
-        content_trainable = Convolution1D(filters=2048, kernel_size=5, padding='same', activation='relu')(content_embeddings)
-        content_trainable = GlobalMaxPooling1D()(content_trainable)
-        content_trainable = Dropout(0.8)(content_trainable)
-
-        # Convolutional block
-        conv_blocks = []
-        for f in [2**x for x in range(1,11)]:
-            for sz in range(3,6):
-                conv = Convolution1D(filters=f,
-                                     kernel_size=sz,
-                                     padding="valid",
-                                     activation="relu",
-                                     strides=1)(content_embeddings)
-            
-                conv = MaxPooling1D(pool_size=5)(conv)
-                conv = Flatten()(conv)
-                conv_blocks.append(conv)
-        content_conv_block = Concatenate()(conv_blocks)
-        content_conv_block = Dropout(0.8)(content_conv_block)
-
-        content_conv_block = Dense(256, activation='relu')(content_conv_block)
-        
-        # content_not_trainable = Embedding(
-        #     input_dim=self.input_dim_content,
-        #     output_dim=self.embeddings_dim_content, 
-        #     weights=[self.embeddings_weights_content],
-        #     input_length=self.reader.max_sequence_length_content,
-        #     trainable=False
-        # )(content_input)
-        # content_not_trainable = Convolution1D(filters=1024, kernel_size=5, padding='same', activation='relu')(content_not_trainable)
-        # content_not_trainable = GlobalMaxPooling1D()(content_not_trainable)
+        content_global_max_pool = GlobalMaxPooling1D()(content_conv)
+        content_trainable = Dropout(0.5)(content_global_max_pool)
                 
         domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
-        domain = Embedding(
+        domain_embeddings = Embedding(
             input_dim=self.input_dim_domains,
             output_dim=self.embeddings_dim_domains, 
             weights=[self.embeddings_weights_domains],
             input_length=self.reader.max_sequence_length_domains,
             trainable=True
         )(domain_input)
+        domain_embeddings = Dropout(0.5)(domain_embeddings)
+        domain = Flatten()(domain_embeddings)
+
+        x = keras.layers.concatenate([content_trainable, domain])
         
-        domain = Flatten()(domain)
-    
-        # x = keras.layers.concatenate([content_trainable, content_not_trainable, domain])
-        x = keras.layers.concatenate([content_trainable, content_conv_block, domain])
-        #x1 = keras.layers.average([content_trainable, content_not_trainable])
-        #x = keras.layers.concatenate([x, x1])
-        # x = Dense(128, activation='relu')(x)
-        # x = Dense(64, activation='relu')(x)
         x = Dense(32, activation='relu')(x)
         x = Dropout(0.5)(x)
 
         output = Dense(self.reader.nb_classes, activation='softmax')(x)
-
         optim = keras.optimizers.Adam(lr=0.0001) # default lr=0.001
+
         self.model = Model(inputs=[content_input, domain_input], outputs=output)
         self.model.compile(loss='categorical_crossentropy', optimizer=optim, metrics=['accuracy'])
         
@@ -274,7 +245,7 @@ class WebClassifier(object):
                        validation_split=validation_split,
                        validation_data=dev,
                        callbacks=[
-                           EarlyStopping(verbose=True, patience=5, monitor='val_loss'),
+                           EarlyStopping(verbose=True, patience=10, monitor='val_loss'),
                            ModelCheckpoint(self.file_model, monitor='val_loss', verbose=True, save_best_only=True)
                        ])
 
@@ -391,13 +362,15 @@ def main():
     parser_train.add_argument('-msl', '--max-sequence-length-content', help='Max sequence length', type=int, required=True)
     parser_train.add_argument('-mwd', '--max-words-domains', help='Max words domains', type=int)
     parser_train.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
-    parser_train.add_argument('-e', '--embeddings', help='Embeddings', type=str, required=True)
+    parser_train.add_argument('-e', '--embeddings', help='Embeddings', type=str, default=None)
+    parser_train.add_argument('-es', '--embeddings-size', help='Embeddings size', type=int, default=300)
     parser_train.add_argument('-ed', '--embeddings-domains', help='Embeddings for domain', type=str, required=False)
     parser_train.add_argument('-l', '--lower', action='store_true')
     parser_train.add_argument('-epochs', '--epochs', help='Epochs', type=int, default=200)
     parser_train.add_argument('-batch', '--batch', help='# batch', type=int, default=16)
     parser_train.add_argument('-w', '--window', help='window', type=int, default=None)
     parser_train.add_argument('-bpe', '--bpe', help='bpe file', type=str, default=None)
+    parser_train.add_argument('-nsp', '--nosplit', help='don\'t split train/dev', action='store_true')
 
     for arg in common_args:
         parser_train.add_argument(*arg[0], **arg[1])
@@ -446,22 +419,33 @@ def main():
                                       window=args.window,
                                       bpe=args.bpe)
 
-        X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
+        if args.nosplit:
+            X_train, y_train = reader.read(False)
+        else:
+            X_train, y_train, X_dev, y_dev, y_dev_orig = reader.read()
+
         logging.info('X_train %s %s - y_train %s' % (len(X_train[0]), len(X_train[1]), len(y_train)))
 
-        logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
+        if args.embeddings:
+            logging.info('Reading Embedings: using the file %s, max words content %s, max sequence length %s content' % (args.embeddings, args.max_words_content, args.max_sequence_length_content))
 
-        num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
-                                                                                    reader.max_words_content,
-                                                                                    reader.tokenizer_content.word_index, args.lower)
+            num_words_content, embedding_matrix_content, embeddings_size_content = Reader.read_embeddings(args.embeddings,
+                                                                                                          reader.max_words_content,
+                                                                                                          reader.tokenizer_content.word_index,
+                                                                                                          args.lower)
+        else:
+            logging.info('No pretrained embedings: using the embeddings size %s, max words content %s, max sequence length %s content' % (args.embeddings_size, args.max_words_content, args.max_sequence_length_content))
+            num_words_content = reader.max_words_content
+            embedding_matrix_content = None
+            embeddings_size_content = args.embeddings_size
 
         logging.info('Reading Embedings: using the file %s, max words domains %s, max sequence length %s domains' % (args.embeddings_domains, args.max_words_domains, args.max_sequence_length_domains))
 
-
         num_words_domains, embedding_matrix_domains, embeddings_size_domains = Reader.read_embeddings(args.embeddings_domains,
-                                                                                    reader.max_words_domains,
-                                                                                    reader.tokenizer_domains.word_index, args.lower)
-    
+                                                                                                      reader.max_words_domains,
+                                                                                                      reader.tokenizer_domains.word_index,
+                                                                                                      args.lower)
+
         webClassifier = WebClassifier(
             reader=reader,
             file_model=args.file_model,
@@ -480,24 +464,26 @@ def main():
         webClassifier.save()
 
         webClassifier.load()
-        logging.info('Evalutaing the model')
-        webClassifier.evaluate(X_dev, y_dev) 
 
-        y_pred, p = webClassifier.predict(X_dev)
+        if not args.nosplit:
 
-        # predicted = open('predicted', 'w')
-        # for yy in y_pred:
-        #     print >> predicted, yy
-        # predicted.close()
+            logging.info('Evalutaing the model')
+            webClassifier.evaluate(X_dev, y_dev) 
 
+            y_pred, p = webClassifier.predict(X_dev)
+        
+            # predicted = open('predicted', 'w')
+            # for yy in y_pred:
+            #     print >> predicted, yy
+            # predicted.close()
 
-        #print(classification_report(numpy.argmax(y_test,axis=1), y_pred, target_names=['a', 'b']))
+            #print(classification_report(numpy.argmax(y_test,axis=1), y_pred, target_names=['a', 'b']))
+            logging.info('\n%s' % classification_report(y_dev_orig, y_pred))
+            logging.info('*'*80)
+            #print(confusion_matrix(numpy.argmax(y_test,axis=1), y_pred))
+            logging.info('\n%s' % confusion_matrix(y_dev_orig, y_pred))
 
         webClassifier.modelSummary()
-        logging.info('\n%s' % classification_report(y_dev_orig, y_pred))
-        logging.info('*'*80)
-        #print(confusion_matrix(numpy.argmax(y_test,axis=1), y_pred))
-        logging.info('\n%s' % confusion_matrix(y_dev_orig, y_pred))
 
     elif args.which == 'test':
         webClassifier = WebClassifier(file_model=args.file_model)
@@ -505,8 +491,8 @@ def main():
         X, y, y_orig = webClassifier.reader.read_for_test()
         webClassifier.evaluate(X, y)
         y_pred, p = webClassifier.predict(X)
-        for i, el in enumerate(y_pred):
-            print >> sys.stderr, el, p[i]
+        # for i, el in enumerate(y_pred):
+        #     print >> sys.stderr, el, p
         webClassifier.modelSummary()
         logging.info('\n%s' % classification_report(y_orig, y_pred))
         logging.info('\n%s' % confusion_matrix(y_orig, y_pred))
