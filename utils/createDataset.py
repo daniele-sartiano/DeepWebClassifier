@@ -18,7 +18,7 @@ def visible(element):
     return True
 
 
-def extractor(path):
+def extractor(path, headings=False):
     try:
         html = open(path).read()
         if not html:
@@ -39,6 +39,14 @@ def extractor(path):
                 words.append(' '.join([w.strip() for w in tag.encode('utf-8').split()]))
 
         data = ' '.join(words)
+
+        if headings:
+            titles = []
+            for link in soup.findAll(['h1', 'h2']):
+                titles.append(' '.join([w.strip().lower() for w in link.text.encode('utf-8').split()]))        
+            titles = set(titles)
+            return data, ' '.join([el for el in titles])
+        
         #data = soup.findAll(text=True)
         #return ' '.join(' '.join([' '.join([e.strip() for e in el.strip().split() if e.strip()]) for el in filter(visible, data) if el.strip()]).splitlines())
         return data
@@ -49,6 +57,7 @@ def extractor(path):
 
 
 global_path = ''
+headings = False
 
 def extract(line):
     domain, _, label = line.strip().split('\t')
@@ -60,6 +69,7 @@ def extract(line):
 
     if os.path.exists(journal):
         text = []
+        h = []
         for line in open(journal):
             if not line.strip():
                 continue
@@ -68,11 +78,17 @@ def extract(line):
             fname = row[row.find(domain)+len(domain)+1:]
             
             if fname and os.path.exists(os.path.join(path, fname)):
-                #print >> sys.stderr, 'elaborating', os.path.join(path, fname)
-                text.append(extractor(os.path.join(path, fname)))
+                r = extractor(os.path.join(path, fname), headings)
+                if headings:
+                    text.append(r[0])
+                    h.append(r[1])
+                else:
+                    text.append(r)
 
+        if headings:
+            return '%s\t%s\t%s\t%s' % (domain, '___deep_classifier_project___'.join(text), '___deep_classifier_project___'.join(h), label)
         return '%s\t%s\t%s' % (domain, '___deep_classifier_project___'.join(text), label)
-    print >> sys.stderr, 'skipping', domain, label
+    print >> sys.stderr, 'skipping', path, domain, label
     return None
 
 
@@ -80,12 +96,17 @@ def main():
     parser = argparse.ArgumentParser(description='Corpus creator')
     parser.add_argument('-d', '--directory', help='the directory with files', type=str, required=True)
     parser.add_argument('-p', '--process', type=int, default=12)
-    
+    parser.add_argument('-headings', '--headings', action='store_true')
+
     args = parser.parse_args()
+
+    print >> sys.stderr, args
 
     def initialize(args):
         global global_path
+        global headings
         global_path = args.directory
+        headings = args.headings
 
     pool = multiprocessing.Pool(args.process, initialize, (args,))
 

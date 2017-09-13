@@ -340,3 +340,159 @@ class TextDomainReader(Reader):
 
         return [X_train, X_train_domains], y_train, [X_dev, X_dev_domains], y_dev, y_dev_orig
 
+
+class TextHeadingsDomainReader(TextDomainReader):
+        def __init__(self, input=None,
+                     max_sequence_length_content=None, max_words_content=None, 
+                     max_sequence_length_domains=None, max_words_domains=None, 
+                     content_vocabulary=None, domains_vocabulary=None,
+                     tokenizer_content=None, tokenizer_domains=None,
+                     headings_content=None, headings_domains=None,
+                     nb_classes=-1, lower=False, logger=None, bpe=None, window=None):
+
+        super(TextHeadingsDomainReader, self).__init__(input)
+
+        if input is None:
+            self.input = sys.stdin
+        self.max_sequence_length_content = max_sequence_length_content
+        self.max_words_content = max_words_content
+        self.max_sequence_length_domains = max_sequence_length_domains
+        self.max_words_domains = max_words_domains
+        self.content_vocabulary = content_vocabulary
+        self.domains_vocabulary = domains_vocabulary
+        self.headings_vocabulary = headings_vocabulary
+        self.splitter = Splitter(self.domains_vocabulary)
+        self.nb_classes = nb_classes
+        self.tokenizer_content = tokenizer_content
+        self.tokenizer_domains = tokenizer_domains
+        self.headings_domains = headings_domains
+        self.lower = lower
+        self.window = window
+        self.bpe = bpe
+        
+        if logger:
+            self.logger = logger
+        else:
+            logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(message)s', level=logging.INFO)
+            self.logger = logging
+            
+        self.fields += [
+            'max_sequence_length_content',
+            'max_words_content',
+            'max_sequence_length_domains',
+            'max_words_domains',
+            'content_vocabulary',
+            'domains_vocabulary',
+            'headings_vocabulary',
+            'nb_classes',
+            'tokenizer_content',
+            'tokenizer_domains',
+            'headings_domains',
+            'lower',
+            'window',
+            'bpe'
+        ]
+
+
+    def _read(self):
+        labels = []
+        texts = []
+        domains = []
+        headings = []
+
+        self.logger.info('Reading corpus')
+        
+        for i, line in enumerate(self.input):
+            d, t, h, l = line.strip().split('\t')
+            for label in l.split(','):
+                #l = 0 if int(label) == 13 else int(label)
+                labels.append(int(l))
+                            
+                if self.window:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, window=self.window)))
+                elif self.bpe:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, bpe=self.bpe)))
+                else:
+                    texts.append(' '.join(normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)))
+
+                headings.append(' '.join(normalize_line(ht, ower=self.lower, vocabulary=self.headings_vocabulary)))
+
+                d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
+                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
+                domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+        return labels, texts, domains, headings
+        
+        
+    def read_for_test(self):
+        labels, texts, domains, headings = self._read()
+
+        sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
+        sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
+
+        sequences_content = self.tokenizer_content.texts_to_sequences(texts)
+        sequences_content = sequence.pad_sequences(sequences_content, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
+
+        sequences_headings = self.tokenizer_headings.texts_to_sequences(headings)
+        sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
+
+        
+        y_orig = labels
+        y = np_utils.to_categorical(y_orig, self.nb_classes)
+        
+        X = sequences_content
+        X_domains = sequences_domains
+        X_headings = sequences_headings
+
+        return [X, X_domains, X_headings], y, y_orig
+
+
+    def read(self):
+        labels, texts, domains, headings = self._read()
+        self.nb_classes = len(set(labels)) #43
+
+        self.logger.info('collecting domains sequences')
+        
+        self.tokenizer_domains = Tokenizer(num_words=self.max_words_domains, lower=False)
+        self.tokenizer_domains.fit_on_texts(domains)
+        sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
+        sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
+
+        self.logger.info('collecting content sequences')
+
+        self.tokenizer_content = Tokenizer(num_words=self.max_words_content, lower=False)
+        self.tokenizer_content.fit_on_texts(texts)
+        sequences_content = self.tokenizer_content.texts_to_sequences(texts)
+        sequences_content = sequence.pad_sequences(sequences_content, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
+
+        self.logger.info('collecting headings sequences')
+
+        self.headings_content = Tokenizer(num_words=self.max_words_content, lower=False)
+        self.headings_content.fit_on_texts(headings)
+        sequences_headings = self.tokenizer_headings.texts_to_sequences(headings)
+        sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
+        
+        
+        self.logger.info('Splitting corpus')
+        
+        rng_state = numpy.random.get_state()
+        numpy.random.shuffle(sequences_content)
+        numpy.random.set_state(rng_state)
+        numpy.random.shuffle(labels)
+        numpy.random.set_state(rng_state)
+        numpy.random.shuffle(sequences_domains)
+
+        toSplit = int(len(sequences_content) * 0.1)
+        X_dev = sequences_content[0:toSplit]
+        X_dev_domains = sequences_domains[0:toSplit]
+        X_dev_headings = sequences_headings[0:toSplit]
+
+        y_dev_orig = labels[0:toSplit]
+        y_dev = np_utils.to_categorical(y_dev_orig, self.nb_classes)
+        
+        X_train = sequences_content[toSplit:]
+        X_train_domains = sequences_domains[toSplit:]
+        X_train_headings = sequences_headings[toSplit:]
+        
+        y_train = np_utils.to_categorical(labels[toSplit:], self.nb_classes)
+
+        return [X_train, X_train_domains, X_train_headings], y_train, [X_dev, X_dev_domains, X_dev_headings], y_dev, y_dev_orig
