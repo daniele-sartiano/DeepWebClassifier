@@ -60,13 +60,9 @@ class WebClassifier(object):
         )(content_input)
         content_embeddings = Dropout(0.5)(content_embeddings)
         content_conv = Convolution1D(filters=2048, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
-        #content_conv = LocallyConnected1D(filters=256, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
+
         content_global_max_pool = GlobalMaxPooling1D()(content_conv)
         content_trainable = Dropout(0.5)(content_global_max_pool)
-
-        # content_conv_local = LocallyConnected1D(filters=1024, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
-        # content_global_max_pool_local = GlobalMaxPooling1D()(content_conv_local)
-        # content_trainable_local = Dropout(0.8)(content_global_max_pool_local)
                 
         domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
         domain_embeddings = Embedding(
@@ -79,23 +75,14 @@ class WebClassifier(object):
         domain_embeddings = Dropout(0.5)(domain_embeddings)
         domain = Flatten()(domain_embeddings)
 
-        
-        
-        # content_embeddings_reshape = Reshape((-1,))(content_embeddings)
-        # content_embeddings_reshape = Dropout(0.5)(content_embeddings_reshape)
-
         x = keras.layers.concatenate([content_trainable, domain])
         
-        # x = keras.layers.concatenate([content_trainable, content_not_trainable, domain])
-        # x = keras.layers.concatenate([content_trainable, content_conv_block, domain])
-        #x1 = keras.layers.average([content_trainable, content_not_trainable])
-        #x = keras.layers.concatenate([x, x1])
         x = Dense(32, activation='relu')(x)
         x = Dropout(0.5)(x)
 
         output = Dense(self.reader.nb_classes, activation='softmax')(x)
-
         optim = keras.optimizers.Adam(lr=0.0001) # default lr=0.001
+
         self.model = Model(inputs=[content_input, domain_input], outputs=output)
         self.model.compile(loss='categorical_crossentropy', optimizer=optim, metrics=['accuracy'])
         

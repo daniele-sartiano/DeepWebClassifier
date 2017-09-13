@@ -264,8 +264,8 @@ class TextDomainReader(Reader):
         for i, line in enumerate(self.input):
             d, t, l = line.strip().split('\t')
             for label in l.split(','):
-                l = 0 if int(label) == 13 else int(label)
-                labels.append(l)
+                #l = 0 if int(label) == 13 else int(label)
+                labels.append(int(l))
                             
                 if self.window:
                     texts.append(' '.join(normalize_line(t, lower=self.lower, window=self.window)))
