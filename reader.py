@@ -331,6 +331,9 @@ class TextDomainReader(Reader):
             X_dev = sequences_content[0:toSplit]
             X_dev_domains = sequences_domains[0:toSplit]
 
+            y_dev_orig = labels[0:toSplit]
+            y_dev = np_utils.to_categorical(y_dev_orig, self.nb_classes)
+
             X_train = sequences_content[toSplit:]
             X_train_domains = sequences_domains[toSplit:]
 
@@ -342,7 +345,7 @@ class TextDomainReader(Reader):
 
 
 class TextHeadingsDomainReader(TextDomainReader):
-        def __init__(self, input=None,
+    def __init__(self, input=None,
                      max_sequence_length_content=None, max_words_content=None, 
                      max_sequence_length_domains=None, max_words_domains=None, 
                      content_vocabulary=None, domains_vocabulary=None,
