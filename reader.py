@@ -346,21 +346,24 @@ class TextDomainReader(Reader):
 
 class TextHeadingsDomainReader(Reader):
     def __init__(self, input=None,
-                     max_sequence_length_content=None, max_words_content=None, 
-                     max_sequence_length_domains=None, max_words_domains=None, 
-                     content_vocabulary=None, domains_vocabulary=None, headings_vocabulary=None,
-                     tokenizer_content=None, tokenizer_domains=None,
-                     headings_content=None, headings_domains=None,
-                     nb_classes=-1, lower=False, logger=None, bpe=None, window=None):
+                 max_sequence_length_content=None, max_words_content=None, 
+                 max_sequence_length_domains=None, max_words_domains=None,
+                 max_sequence_length_headings=None, max_words_headings=None, 
+                 content_vocabulary=None, domains_vocabulary=None, headings_vocabulary=None,
+                 tokenizer_content=None, tokenizer_domains=None,
+                 headings_content=None, tokenizer_headings=None,
+                 nb_classes=-1, lower=False, logger=None, bpe=None, window=None):
 
         super(TextHeadingsDomainReader, self).__init__(input)
 
         if input is None:
             self.input = sys.stdin
-        self.max_sequence_length_content = max_sequence_length_content
         self.max_words_content = max_words_content
+        self.max_sequence_length_content = max_sequence_length_content
         self.max_sequence_length_domains = max_sequence_length_domains
+        self.max_sequence_length_headings = max_sequence_length_headings
         self.max_words_domains = max_words_domains
+        self.max_words_headings = max_words_headings
         self.content_vocabulary = content_vocabulary
         self.domains_vocabulary = domains_vocabulary
         self.headings_vocabulary = headings_vocabulary
@@ -368,7 +371,7 @@ class TextHeadingsDomainReader(Reader):
         self.nb_classes = nb_classes
         self.tokenizer_content = tokenizer_content
         self.tokenizer_domains = tokenizer_domains
-        self.headings_domains = headings_domains
+        self.tokenizer_headings = tokenizer_headings
         self.lower = lower
         self.window = window
         self.bpe = bpe
@@ -384,13 +387,15 @@ class TextHeadingsDomainReader(Reader):
             'max_words_content',
             'max_sequence_length_domains',
             'max_words_domains',
+            'max_sequence_length_headings',
+            'max_words_headings',
             'content_vocabulary',
             'domains_vocabulary',
             'headings_vocabulary',
             'nb_classes',
             'tokenizer_content',
             'tokenizer_domains',
-            'headings_domains',
+            'tokenizer_headings',
             'lower',
             'window',
             'bpe'
@@ -436,7 +441,7 @@ class TextHeadingsDomainReader(Reader):
         sequences_content = sequence.pad_sequences(sequences_content, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
 
         sequences_headings = self.tokenizer_headings.texts_to_sequences(headings)
-        sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
+        sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_headings)
 
         
         y_orig = labels
@@ -470,11 +475,13 @@ class TextHeadingsDomainReader(Reader):
 
         self.logger.info('collecting headings sequences')
 
-        self.tokenizer_headings = Tokenizer(num_words=self.max_words_content, lower=False)
+        self.tokenizer_headings = Tokenizer(num_words=self.max_words_headings, lower=False)
         self.tokenizer_headings.fit_on_texts(headings)
         sequences_headings = self.tokenizer_headings.texts_to_sequences(headings)
-        sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
-        
+        sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_headings)
+
+        numpy.set_printoptions(threshold=numpy.nan)
+        print >> sys.stderr, self.max_sequence_length_headings, sequences_headings, '\n'
         
         self.logger.info('Splitting corpus')
         

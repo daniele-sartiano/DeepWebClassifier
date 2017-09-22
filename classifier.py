@@ -304,17 +304,17 @@ class WebClassifierH(WebClassifier):
         content_global_max_pool = GlobalMaxPooling1D()(content_conv)
         content_trainable = Dropout(0.5)(content_global_max_pool)
 
-        headings_input = Input(shape=(self.reader.max_sequence_length_content,))
+        headings_input = Input(shape=(self.reader.max_sequence_length_headings,))
         headings_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
         headings_embeddings = Embedding(
             input_dim=self.input_dim_content,
             output_dim=self.embeddings_dim_content,
             weights=content_embeddings_weights,
-            input_length=self.reader.max_sequence_length_content,
+            input_length=self.reader.max_sequence_length_headings,
             trainable=True
         )(headings_input)
         headings_embeddings = Dropout(0.5)(headings_embeddings)
-        headings_conv = Convolution1D(filters=2048, kernel_size=7, padding='valid', activation='relu')(headings_embeddings)
+        headings_conv = Convolution1D(filters=256, kernel_size=3, padding='valid', activation='relu')(headings_embeddings)
 
         headings_global_max_pool = GlobalMaxPooling1D()(headings_conv)
         headings_trainable = Dropout(0.5)(headings_global_max_pool)
@@ -416,7 +416,9 @@ def main():
     parser_train.add_argument('-mw', '--max-words-content', help='Max words', type=int, required=True)
     parser_train.add_argument('-msl', '--max-sequence-length-content', help='Max sequence length', type=int, required=True)
     parser_train.add_argument('-mwd', '--max-words-domains', help='Max words domains', type=int)
-    parser_train.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length', type=int, required=True)
+    parser_train.add_argument('-msld', '--max-sequence-length-domains', help='Max sequence length domains', type=int, required=True)
+    parser_train.add_argument('-mwh', '--max-words-headings', help='Max words headings', type=int, default=20000)
+    parser_train.add_argument('-mslh', '--max-sequence-length-headings', help='Max sequence length headings', type=int, default=500)
     parser_train.add_argument('-e', '--embeddings', help='Embeddings', type=str, default=None)
     parser_train.add_argument('-es', '--embeddings-size', help='Embeddings size', type=int, default=300)
     parser_train.add_argument('-ed', '--embeddings-domains', help='Embeddings for domain', type=str, required=False)
@@ -453,7 +455,15 @@ def main():
 
     if args.which == 'train':
         logging.info('Reading vocabulary')
-        reader_cls = TextHeadingsDomainReader if args.headings else TextDomainReader
+        additional_reader_args = {}
+        if args.headings:
+            reader_cls = TextHeadingsDomainReader
+            additional_reader_args = {
+                'max_sequence_length_headings':args.max_sequence_length_headings, 
+                'max_words_headings':args.max_words_headings                
+            }
+        else:
+            reader_cls = TextDomainReader
         reader = None
         if args.embeddings_domains:
             vocabulary = None
@@ -464,19 +474,6 @@ def main():
                     continue
                 vocabulary.add(w.split(' ')[0].strip().lower())
 
-            reader_args = {
-                'input':input, 
-                'max_sequence_length_content':args.max_sequence_length_content, 
-                'max_words_content':args.max_words_content, 
-                'max_sequence_length_domains':args.max_sequence_length_domains, 
-                'max_words_domains':args.max_words_domains,
-                'domains_vocabulary':vocabulary,
-                'lower':args.lower,
-                'logger':logging,
-                'window':args.window,
-                'bpe':args.bpe
-            }
-
             reader = reader_cls(input=input, 
                                 max_sequence_length_content=args.max_sequence_length_content, 
                                 max_words_content=args.max_words_content, 
@@ -486,7 +483,7 @@ def main():
                                 lower=args.lower,
                                 logger=logging,
                                 window=args.window,
-                                bpe=args.bpe)
+                                bpe=args.bpe, **additional_reader_args)
 
         if args.nosplit:
             X_train, y_train = reader.read(False)
@@ -556,8 +553,10 @@ def main():
         webClassifier.modelSummary()
 
     elif args.which == 'test':
-        webClassifier = WebClassifier(file_model=args.file_model)
-        webClassifier.load()
+        webClassifier_cls = WebClassifierH if args.headings else WebClassifier
+        reader_cls = TextHeadingsDomainReader if args.headings else TextDomainReader
+        webClassifier = webClassifier_cls(file_model=args.file_model)
+        webClassifier.load(reader_cls)
         X, y, y_orig = webClassifier.reader.read_for_test()
         webClassifier.evaluate(X, y)
         y_pred, p = webClassifier.predict(X)
