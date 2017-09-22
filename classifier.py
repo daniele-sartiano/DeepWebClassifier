@@ -9,11 +9,11 @@ import multiprocessing
 import pandas
 import numpy
 import math
+
 import keras
 from keras.layers import Dense, Activation, LSTM, SimpleRNN, GRU, Dropout, Input, Flatten, GlobalMaxPooling1D, Reshape
 from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
-#from keras.layers.merge import Concatenate
 from keras.models import Sequential, Model, load_model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.layers.convolutional import Convolution1D, MaxPooling1D
@@ -23,7 +23,7 @@ from keras import regularizers
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import classification_report,confusion_matrix
 
-from reader import TextDomainReader, Reader
+from reader import TextDomainReader, Reader, TextHeadingsDomainReader
 
 class WebClassifier(object):
     def __init__(self, reader=None, input_dim_content=-1, batch_size=32, epochs=20, activation='softmax', loss='categorical_crossentropy', optimizer='adam', file_model='web.model', embeddings_weights_content=None, embeddings_dim_content=50, embeddings_weights_domains=None, embeddings_dim_domains=50, input_dim_domains=-1):
@@ -270,10 +270,10 @@ class WebClassifier(object):
         Reader.save(reader_file, self.reader)
 
 
-    def load(self):
+    def load(self, reader_cls):
         self.model = load_model(self.file_model)
         reader_file = '%s_reader.pickle' % self.file_model
-        self.reader = TextDomainReader(**Reader.load(reader_file))
+        self.reader = reader_cls(**Reader.load(reader_file))
 
         
     def setModel(self):
@@ -287,7 +287,61 @@ class WebClassifier(object):
         self.model.summary()
 
 
+class WebClassifierH(WebClassifier):
+    def _create_model(self): 
+        content_input = Input(shape=(self.reader.max_sequence_length_content,))
+        content_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
+        content_embeddings = Embedding(
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content,
+            weights=content_embeddings_weights,
+            input_length=self.reader.max_sequence_length_content,
+            trainable=True
+        )(content_input)
+        content_embeddings = Dropout(0.5)(content_embeddings)
+        content_conv = Convolution1D(filters=2048, kernel_size=7, padding='valid', activation='relu')(content_embeddings)
 
+        content_global_max_pool = GlobalMaxPooling1D()(content_conv)
+        content_trainable = Dropout(0.5)(content_global_max_pool)
+
+        headings_input = Input(shape=(self.reader.max_sequence_length_content,))
+        headings_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
+        headings_embeddings = Embedding(
+            input_dim=self.input_dim_content,
+            output_dim=self.embeddings_dim_content,
+            weights=content_embeddings_weights,
+            input_length=self.reader.max_sequence_length_content,
+            trainable=True
+        )(headings_input)
+        headings_embeddings = Dropout(0.5)(headings_embeddings)
+        headings_conv = Convolution1D(filters=2048, kernel_size=7, padding='valid', activation='relu')(headings_embeddings)
+
+        headings_global_max_pool = GlobalMaxPooling1D()(headings_conv)
+        headings_trainable = Dropout(0.5)(headings_global_max_pool)
+                
+        domain_input = Input(shape=(self.reader.max_sequence_length_domains, ))
+        domain_embeddings = Embedding(
+            input_dim=self.input_dim_domains,
+            output_dim=self.embeddings_dim_domains, 
+            weights=[self.embeddings_weights_domains],
+            input_length=self.reader.max_sequence_length_domains,
+            trainable=True
+        )(domain_input)
+        domain_embeddings = Dropout(0.5)(domain_embeddings)
+        domain = Flatten()(domain_embeddings)
+
+        x = keras.layers.concatenate([content_trainable, headings_trainable, domain])
+        
+        x = Dense(32, activation='relu')(x)
+        x = Dropout(0.5)(x)
+
+        output = Dense(self.reader.nb_classes, activation='softmax')(x)
+        optim = keras.optimizers.Adam(lr=0.0001) # default lr=0.001
+
+        self.model = Model(inputs=[content_input, domain_input, headings_input], outputs=output)
+        self.model.compile(loss='categorical_crossentropy', optimizer=optim, metrics=['accuracy'])
+
+    
 class WebClassifierMLP(WebClassifier):
     def _create_model(self):
         self.model = Sequential()
@@ -355,7 +409,8 @@ def main():
     
     common_args = [
         (['-f', '--file-model'], {'help':'file model', 'type':str, 'default':'web.model'}),
-        (['-i', '--input'], {'help':'input', 'help': 'input, default standard input', 'type':str, 'default':None})    
+        (['-i', '--input'], {'help':'input', 'help': 'input, default standard input', 'type':str, 'default':None}),
+        (['-headings', '--headings'], {'help':'don\'t split train/dev', 'action':'store_true'})
     ]
 
     parser_train.add_argument('-mw', '--max-words-content', help='Max words', type=int, required=True)
@@ -398,6 +453,7 @@ def main():
 
     if args.which == 'train':
         logging.info('Reading vocabulary')
+        reader_cls = TextHeadingsDomainReader if args.headings else TextDomainReader
         reader = None
         if args.embeddings_domains:
             vocabulary = None
@@ -408,16 +464,29 @@ def main():
                     continue
                 vocabulary.add(w.split(' ')[0].strip().lower())
 
-            reader = TextDomainReader(input=input, 
-                                      max_sequence_length_content=args.max_sequence_length_content, 
-                                      max_words_content=args.max_words_content, 
-                                      max_sequence_length_domains=args.max_sequence_length_domains, 
-                                      max_words_domains=args.max_words_domains,
-                                      domains_vocabulary=vocabulary,
-                                      lower=args.lower,
-                                      logger=logging,
-                                      window=args.window,
-                                      bpe=args.bpe)
+            reader_args = {
+                'input':input, 
+                'max_sequence_length_content':args.max_sequence_length_content, 
+                'max_words_content':args.max_words_content, 
+                'max_sequence_length_domains':args.max_sequence_length_domains, 
+                'max_words_domains':args.max_words_domains,
+                'domains_vocabulary':vocabulary,
+                'lower':args.lower,
+                'logger':logging,
+                'window':args.window,
+                'bpe':args.bpe
+            }
+
+            reader = reader_cls(input=input, 
+                                max_sequence_length_content=args.max_sequence_length_content, 
+                                max_words_content=args.max_words_content, 
+                                max_sequence_length_domains=args.max_sequence_length_domains, 
+                                max_words_domains=args.max_words_domains,
+                                domains_vocabulary=vocabulary,
+                                lower=args.lower,
+                                logger=logging,
+                                window=args.window,
+                                bpe=args.bpe)
 
         if args.nosplit:
             X_train, y_train = reader.read(False)
@@ -445,8 +514,9 @@ def main():
                                                                                                       reader.max_words_domains,
                                                                                                       reader.tokenizer_domains.word_index,
                                                                                                       args.lower)
+        webClassifier_cls = WebClassifierH if args.headings else WebClassifier
 
-        webClassifier = WebClassifier(
+        webClassifier = webClassifier_cls(
             reader=reader,
             file_model=args.file_model,
             input_dim_content=num_words_content+1,
@@ -463,7 +533,7 @@ def main():
         webClassifier.train(X_train, y_train, validation_split=0.3)
         webClassifier.save()
 
-        webClassifier.load()
+        webClassifier.load(reader_cls)
 
         if not args.nosplit:
 

@@ -344,11 +344,11 @@ class TextDomainReader(Reader):
         return [sequences_content, sequences_domains], np_utils.to_categorical(labels, self.nb_classes)
 
 
-class TextHeadingsDomainReader(TextDomainReader):
+class TextHeadingsDomainReader(Reader):
     def __init__(self, input=None,
                      max_sequence_length_content=None, max_words_content=None, 
                      max_sequence_length_domains=None, max_words_domains=None, 
-                     content_vocabulary=None, domains_vocabulary=None,
+                     content_vocabulary=None, domains_vocabulary=None, headings_vocabulary=None,
                      tokenizer_content=None, tokenizer_domains=None,
                      headings_content=None, headings_domains=None,
                      nb_classes=-1, lower=False, logger=None, bpe=None, window=None):
@@ -379,7 +379,7 @@ class TextHeadingsDomainReader(TextDomainReader):
             logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(message)s', level=logging.INFO)
             self.logger = logging
             
-        self.fields += [
+        self.fields = [
             'max_sequence_length_content',
             'max_words_content',
             'max_sequence_length_domains',
@@ -418,7 +418,7 @@ class TextHeadingsDomainReader(TextDomainReader):
                 else:
                     texts.append(' '.join(normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)))
 
-                headings.append(' '.join(normalize_line(ht, ower=self.lower, vocabulary=self.headings_vocabulary)))
+                headings.append(' '.join(normalize_line(h, lower=self.lower, vocabulary=self.headings_vocabulary)))
 
                 d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
                 selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
@@ -449,9 +449,10 @@ class TextHeadingsDomainReader(TextDomainReader):
         return [X, X_domains, X_headings], y, y_orig
 
 
-    def read(self):
+    def read(self, split=True):
         labels, texts, domains, headings = self._read()
-        self.nb_classes = len(set(labels)) #43
+        print len(labels), len(texts), len(domains)
+        self.nb_classes = len(set(labels))+2 #43
 
         self.logger.info('collecting domains sequences')
         
@@ -469,8 +470,8 @@ class TextHeadingsDomainReader(TextDomainReader):
 
         self.logger.info('collecting headings sequences')
 
-        self.headings_content = Tokenizer(num_words=self.max_words_content, lower=False)
-        self.headings_content.fit_on_texts(headings)
+        self.tokenizer_headings = Tokenizer(num_words=self.max_words_content, lower=False)
+        self.tokenizer_headings.fit_on_texts(headings)
         sequences_headings = self.tokenizer_headings.texts_to_sequences(headings)
         sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_content)
         
@@ -501,6 +502,5 @@ class TextHeadingsDomainReader(TextDomainReader):
             y_train = np_utils.to_categorical(labels[toSplit:], self.nb_classes)
 
             return [X_train, X_train_domains, X_train_headings], y_train, [X_dev, X_dev_domains, X_dev_headings], y_dev, y_dev_orig
-        
         
         return [sequences_content, sequences_domains, sequences_headings], np_utils.to_categorical(labels, self.nb_classes)
