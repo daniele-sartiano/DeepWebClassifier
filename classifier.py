@@ -314,7 +314,7 @@ class WebClassifierH(WebClassifier):
             trainable=True
         )(headings_input)
         headings_embeddings = Dropout(0.5)(headings_embeddings)
-        headings_conv = Convolution1D(filters=256, kernel_size=3, padding='valid', activation='relu')(headings_embeddings)
+        headings_conv = Convolution1D(filters=512, kernel_size=3, padding='valid', activation='relu')(headings_embeddings)
 
         headings_global_max_pool = GlobalMaxPooling1D()(headings_conv)
         headings_trainable = Dropout(0.5)(headings_global_max_pool)
@@ -330,10 +330,20 @@ class WebClassifierH(WebClassifier):
         domain_embeddings = Dropout(0.5)(domain_embeddings)
         domain = Flatten()(domain_embeddings)
 
-        x = keras.layers.concatenate([content_trainable, headings_trainable, domain])
-        
+        x = keras.layers.concatenate([content_trainable, headings_trainable, domain])       
         x = Dense(32, activation='relu')(x)
         x = Dropout(0.5)(x)
+
+        x1 = keras.layers.concatenate([headings_trainable, domain])
+        x1 = Dense(32, activation='relu')(x1)
+        x1 = Dropout(0.5)(x1)
+
+        x2 = keras.layers.concatenate([content_trainable, headings_trainable])
+        x2 = Dense(32, activation='relu')(x2)
+        x2 = Dropout(0.5)(x2)
+
+        
+        x = keras.layers.concatenate([x, x1, x2])
 
         output = Dense(self.reader.nb_classes, activation='softmax')(x)
         optim = keras.optimizers.Adam(lr=0.0001) # default lr=0.001
