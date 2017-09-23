@@ -198,6 +198,13 @@ class Reader(object):
         return numpy.asarray(X_post)
 
 
+    def extract_domain_tokens(self, domain):
+        d_words = sorted([el for el in self.splitter.split(domain[:-3])], key=lambda x:x[1], reverse=True)
+        selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
+        return ' '.join(selected) if len(selected) > 0 else domain[:-3]
+
+
+
 class TextDomainReader(Reader):
     def __init__(self, input=None,
                  max_sequence_length_content=None, max_words_content=None, 
@@ -253,7 +260,6 @@ class TextDomainReader(Reader):
             d.append(sequence[i:i+window_size])
         return d
 
-
     def _read(self):
         labels = []
         texts = []
@@ -266,17 +272,9 @@ class TextDomainReader(Reader):
             for label in l.split(','):
                 #l = 0 if int(label) == 13 else int(label)
                 labels.append(int(l))
-                            
-                if self.window:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, window=self.window)))
-                elif self.bpe:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, bpe=self.bpe)))
-                else:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)))
-
-                d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
-                domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+                text, n_page = normalize_line(t, lower=self.lower, window_size=self.window, bpe=self.bpe, vocabulary=self.content_vocabulary)
+                texts.append(' '.join(text))
+                domains.append(self.extract_domain_tokens(d))
         return labels, texts, domains
         
         
@@ -412,22 +410,15 @@ class TextHeadingsDomainReader(Reader):
         
         for i, line in enumerate(self.input):
             d, t, h, l = line.strip().split('\t')
+            
             for label in l.split(','):
                 #l = 0 if int(label) == 13 else int(label)
                 labels.append(int(l))
-                            
-                if self.window:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, window=self.window)))
-                elif self.bpe:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, bpe=self.bpe)))
-                else:
-                    texts.append(' '.join(normalize_line(t, lower=self.lower, vocabulary=self.content_vocabulary)))
-
-                headings.append(' '.join(normalize_line(h, lower=self.lower, vocabulary=self.headings_vocabulary)))
-
-                d_words = sorted([el for el in self.splitter.split(d[:-3])], key=lambda x:x[1], reverse=True)
-                selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
-                domains.append(' '.join(selected) if len(selected) > 0 else d[:-3])
+                text, n_page = normalize_line(t, lower=self.lower, window_size=self.window, bpe=self.bpe, vocabulary=self.content_vocabulary)
+                texts.append(' '.join(text))
+                heading_text, _ = normalize_line(h, lower=self.lower, vocabulary=self.headings_vocabulary)
+                headings.append(' '.join(heading_text))            
+                domains.append(self.extract_domain_tokens(d))
         return labels, texts, domains, headings
         
         

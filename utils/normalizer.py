@@ -72,19 +72,20 @@ def normalize_line(line, lower=False, vocabulary=None, window_size=None, bpe=Non
         s = re.sub(r'\d', '0', sentence)
         if lower:
             s = s.lower()
-        if vocabulary:
-            s = ' '.join([w for w in s.split() if len(w) > 2 and w in vocabulary])
-        else:
-            s = ' '.join([w for w in s.split() if len(w.strip()) > 2 and len(set(w.strip())) > 1])
         if window_size:
             r = ' '.join([' '.join(el) for el in windows(s, window_size)])
             s = r
-        if bpe:
+        elif bpe:
             s = bpe_encoder.segment(s).strip()
+        elif vocabulary:
+            s = ' '.join([w for w in s.split() if len(w) > 2 and w in vocabulary])
+        else:
+            s = ' '.join([w for w in s.split() if len(w.strip()) > 2 and len(set(w.strip())) > 1])
+
         s = s.encode('utf-8')
         if s:
             texts.append(s)
-    return texts
+    return texts, len(sentences)
 
 g_lower = False
 
