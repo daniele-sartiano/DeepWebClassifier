@@ -288,7 +288,8 @@ class WebClassifier(object):
 
 
 class WebClassifierH(WebClassifier):
-    def _create_model(self): 
+    def _create_model(self):
+        n_pages_input = Input(shape=(self.reader.size_n_pages,))
         content_input = Input(shape=(self.reader.max_sequence_length_content,))
         content_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
         content_embeddings = Embedding(
@@ -330,7 +331,7 @@ class WebClassifierH(WebClassifier):
         domain_embeddings = Dropout(0.5)(domain_embeddings)
         domain = Flatten()(domain_embeddings)
 
-        x = keras.layers.concatenate([content_trainable, headings_trainable, domain])       
+        x = keras.layers.concatenate([n_pages_input, content_trainable, headings_trainable, domain])       
         x = Dense(32, activation='relu')(x)
         x = Dropout(0.5)(x)
 
@@ -343,12 +344,12 @@ class WebClassifierH(WebClassifier):
         x2 = Dropout(0.5)(x2)
 
         
-        x = keras.layers.concatenate([x, x1, x2])
+        x = keras.layers.concatenate([n_pages_input, x, x1, x2])
 
         output = Dense(self.reader.nb_classes, activation='softmax')(x)
         optim = keras.optimizers.Adam(lr=0.0001) # default lr=0.001
 
-        self.model = Model(inputs=[content_input, domain_input, headings_input], outputs=output)
+        self.model = Model(inputs=[n_pages_input, content_input, domain_input, headings_input], outputs=output)
         self.model.compile(loss='categorical_crossentropy', optimizer=optim, metrics=['accuracy'])
 
     

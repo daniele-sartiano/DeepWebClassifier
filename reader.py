@@ -197,7 +197,6 @@ class Reader(object):
         print >> sys.stderr, 'discard zeros: ', debug_counter
         return numpy.asarray(X_post)
 
-
     def extract_domain_tokens(self, domain):
         d_words = sorted([el for el in self.splitter.split(domain[:-3])], key=lambda x:x[1], reverse=True)
         selected = sorted(set([tok for words, th in d_words[:3] for tok in words if len(tok.decode('utf8')) > 2 and self.splitter.inVocabulary(tok)]), key=lambda x: len(x), reverse=True)
@@ -262,6 +261,7 @@ class TextDomainReader(Reader):
 
     def _read(self):
         labels = []
+        n_pages = []
         texts = []
         domains = []
 
@@ -274,12 +274,13 @@ class TextDomainReader(Reader):
                 labels.append(int(l))
                 text, n_page = normalize_line(t, lower=self.lower, window_size=self.window, bpe=self.bpe, vocabulary=self.content_vocabulary)
                 texts.append(' '.join(text))
+                n_pages.append(n_page)
                 domains.append(self.extract_domain_tokens(d))
-        return labels, texts, domains
+        return labels, n_pages, texts, domains
         
         
     def read_for_test(self):
-        labels, texts, domains = self._read()
+        labels, n_pages, texts, domains = self._read()
 
         sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
         sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
@@ -297,7 +298,7 @@ class TextDomainReader(Reader):
 
         
     def read(self, split=True):
-        labels, texts, domains = self._read()
+        labels, n_pages, texts, domains = self._read()
         self.nb_classes = 12 #len(set(labels)) #43
 
         self.logger.info('collecting domains sequences')
@@ -402,6 +403,7 @@ class TextHeadingsDomainReader(Reader):
 
     def _read(self):
         labels = []
+        n_pages = []
         texts = []
         domains = []
         headings = []
@@ -416,14 +418,15 @@ class TextHeadingsDomainReader(Reader):
                 labels.append(int(l))
                 text, n_page = normalize_line(t, lower=self.lower, window_size=self.window, bpe=self.bpe, vocabulary=self.content_vocabulary)
                 texts.append(' '.join(text))
+                n_pages.append(n_page)
                 heading_text, _ = normalize_line(h, lower=self.lower, vocabulary=self.headings_vocabulary)
                 headings.append(' '.join(heading_text))            
                 domains.append(self.extract_domain_tokens(d))
-        return labels, texts, domains, headings
+        return labels, n_pages, texts, domains, headings
         
         
     def read_for_test(self):
-        labels, texts, domains, headings = self._read()
+        labels, n_pages, texts, domains, headings = self._read()
 
         sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
         sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
@@ -446,7 +449,7 @@ class TextHeadingsDomainReader(Reader):
 
 
     def read(self, split=True):
-        labels, texts, domains, headings = self._read()
+        labels, n_pages, texts, domains, headings = self._read()
         print len(labels), len(texts), len(domains)
         self.nb_classes = len(set(labels))+2 #43
 
@@ -471,10 +474,13 @@ class TextHeadingsDomainReader(Reader):
         sequences_headings = self.tokenizer_headings.texts_to_sequences(headings)
         sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_headings)
 
-        numpy.set_printoptions(threshold=numpy.nan)
-        print >> sys.stderr, self.max_sequence_length_headings, sequences_headings, '\n'
+        # numpy.set_printoptions(threshold=numpy.nan)
+        # print >> sys.stderr, self.max_sequence_length_headings, sequences_headings, '\n'
         
         self.logger.info('Splitting corpus')
+
+        self.size_n_pages = max(n_pages) + 1
+        n_pages = np_utils.to_categorical(n_pages, self.size_n_pages)
         
         if split:
 
@@ -486,6 +492,8 @@ class TextHeadingsDomainReader(Reader):
             numpy.random.shuffle(sequences_domains)
             
             toSplit = int(len(sequences_content) * 0.1)
+            
+            X_dev_n_pages = n_pages[0:toSplit]
             X_dev = sequences_content[0:toSplit]
             X_dev_domains = sequences_domains[0:toSplit]
             X_dev_headings = sequences_headings[0:toSplit]
@@ -493,12 +501,13 @@ class TextHeadingsDomainReader(Reader):
             y_dev_orig = labels[0:toSplit]
             y_dev = np_utils.to_categorical(y_dev_orig, self.nb_classes)
         
+            X_train_n_pages = n_pages[toSplit:]
             X_train = sequences_content[toSplit:]
             X_train_domains = sequences_domains[toSplit:]
             X_train_headings = sequences_headings[toSplit:]
             
             y_train = np_utils.to_categorical(labels[toSplit:], self.nb_classes)
 
-            return [X_train, X_train_domains, X_train_headings], y_train, [X_dev, X_dev_domains, X_dev_headings], y_dev, y_dev_orig
+            return [X_train_n_pages, X_train, X_train_domains, X_train_headings], y_train, [X_dev_n_pages, X_dev, X_dev_domains, X_dev_headings], y_dev, y_dev_orig
         
-        return [sequences_content, sequences_domains, sequences_headings], np_utils.to_categorical(labels, self.nb_classes)
+        return [n_pages, sequences_content, sequences_domains, sequences_headings], np_utils.to_categorical(labels, self.nb_classes)
