@@ -351,7 +351,9 @@ class TextHeadingsDomainReader(Reader):
                  content_vocabulary=None, domains_vocabulary=None, headings_vocabulary=None,
                  tokenizer_content=None, tokenizer_domains=None,
                  headings_content=None, tokenizer_headings=None,
-                 nb_classes=-1, lower=False, logger=None, bpe=None, window=None):
+                 nb_classes=-1, lower=False, logger=None, bpe=None, window=None,
+                 size_n_pages=-1
+    ):
 
         super(TextHeadingsDomainReader, self).__init__(input)
 
@@ -374,6 +376,7 @@ class TextHeadingsDomainReader(Reader):
         self.lower = lower
         self.window = window
         self.bpe = bpe
+        self.size_n_pages = size_n_pages
         
         if logger:
             self.logger = logger
@@ -397,9 +400,9 @@ class TextHeadingsDomainReader(Reader):
             'tokenizer_headings',
             'lower',
             'window',
-            'bpe'
+            'bpe',
+            'size_n_pages'
         ]
-
 
     def _read(self):
         labels = []
@@ -428,6 +431,8 @@ class TextHeadingsDomainReader(Reader):
     def read_for_test(self):
         labels, n_pages, texts, domains, headings = self._read()
 
+        n_pages = np_utils.to_categorical(n_pages, self.size_n_pages)
+
         sequences_domains = self.tokenizer_domains.texts_to_sequences(domains)
         sequences_domains = sequence.pad_sequences(sequences_domains, padding='post', truncating='post', maxlen=self.max_sequence_length_domains)
 
@@ -436,21 +441,16 @@ class TextHeadingsDomainReader(Reader):
 
         sequences_headings = self.tokenizer_headings.texts_to_sequences(headings)
         sequences_headings = sequence.pad_sequences(sequences_headings, padding='post', truncating='post', maxlen=self.max_sequence_length_headings)
-
         
         y_orig = labels
         y = np_utils.to_categorical(y_orig, self.nb_classes)
         
-        X = sequences_content
-        X_domains = sequences_domains
-        X_headings = sequences_headings
-
-        return [X, X_domains, X_headings], y, y_orig
+        return [n_pages, sequences_content, sequences_domains, sequences_headings], y, y_orig
 
 
     def read(self, split=True):
         labels, n_pages, texts, domains, headings = self._read()
-        print len(labels), len(texts), len(domains)
+
         self.nb_classes = len(set(labels))+2 #43
 
         self.logger.info('collecting domains sequences')
