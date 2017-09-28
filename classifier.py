@@ -289,7 +289,16 @@ class WebClassifier(object):
 
 class WebClassifierH(WebClassifier):
     def _create_model(self):
+
         n_pages_input = Input(shape=(self.reader.size_n_pages,))
+        n_pages_embeddings = Embedding(
+            input_dim=self.reader.size_n_pages,
+            output_dim=16,
+            trainable=True
+        )(n_pages_input)
+        n_pages_embeddings = Dropout(0.5)(n_pages_embeddings)
+        n_pages = Flatten()(n_pages_embeddings)
+
         content_input = Input(shape=(self.reader.max_sequence_length_content,))
         content_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
         content_embeddings = Embedding(
@@ -304,6 +313,21 @@ class WebClassifierH(WebClassifier):
 
         content_global_max_pool = GlobalMaxPooling1D()(content_conv)
         content_trainable = Dropout(0.5)(content_global_max_pool)
+
+
+        # conv_blocks = []
+        # for sz in (2, 8):
+        #     conv = Convolution1D(filters=128,
+        #                          kernel_size=sz,
+        #                          padding="valid",
+        #                          activation="relu",
+        #                          strides=1)(content_embeddings)
+        #     conv = MaxPooling1D(pool_size=2)(conv)
+        #     conv = Flatten()(conv)
+        #     conv_blocks.append(conv)
+        # content_multiple_conv = Concatenate()(conv_blocks)
+        # content_multiple_conv = Dropout(0.5)(content_multiple_conv)
+
 
         headings_input = Input(shape=(self.reader.max_sequence_length_headings,))
         headings_embeddings_weights = [self.embeddings_weights_content] if self.embeddings_weights_content is not None else None
@@ -331,7 +355,7 @@ class WebClassifierH(WebClassifier):
         domain_embeddings = Dropout(0.5)(domain_embeddings)
         domain = Flatten()(domain_embeddings)
 
-        x = keras.layers.concatenate([n_pages_input, content_trainable, headings_trainable, domain])       
+        x = keras.layers.concatenate([n_pages, content_trainable, headings_trainable, domain])       
         x = Dense(32, activation='relu')(x)
         x = Dropout(0.5)(x)
 
@@ -343,8 +367,23 @@ class WebClassifierH(WebClassifier):
         x2 = Dense(32, activation='relu')(x2)
         x2 = Dropout(0.5)(x2)
 
+        x3 = keras.layers.concatenate([content_trainable, n_pages])
+        x3 = Dense(32, activation='relu')(x3)
+        x3 = Dropout(0.5)(x3)
+
+        x4 = keras.layers.concatenate([domain, n_pages])
+        x4 = Dense(32, activation='relu')(x4)
+        x4 = Dropout(0.5)(x4)
+
+        # x5 = keras.layers.concatenate([headings_trainable, n_pages])
+        # x5 = Dense(32, activation='relu')(x5)
+        # x5 = Dropout(0.5)(x5)
         
-        x = keras.layers.concatenate([n_pages_input, x, x1, x2])
+        # 6 = keras.layers.concatenate([headings_trainable, domain])
+        # x6 = Dense(32, activation='relu')(x6)
+        # x6 = Dropout(0.5)(x6)
+
+        x = keras.layers.concatenate([x, x1, x2, x3, x4])
 
         output = Dense(self.reader.nb_classes, activation='softmax')(x)
         optim = keras.optimizers.Adam(lr=0.0001) # default lr=0.001
